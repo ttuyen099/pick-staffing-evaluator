@@ -151,8 +151,7 @@
 
         /* Tooltip */
         .has-tip { position: relative; cursor: help; }
-        .has-tip:hover .tip-box { display: block; }
-        .tip-box { display: none; position: fixed; right: 24px; top: 50%; transform: translateY(-50%); z-index: 100; background: #1e293b; border: 1px solid #007aff; border-radius: 12px; padding: 14px 18px; font-size: 0.78rem; white-space: nowrap; box-shadow: 0 8px 30px rgba(0,0,0,0.7); min-width: 240px; max-width: 340px; }
+        .tip-box { display: none; position: fixed; z-index: 100; background: #1e293b; border: 1px solid #007aff; border-radius: 12px; padding: 14px 18px; font-size: 0.78rem; white-space: nowrap; box-shadow: 0 8px 30px rgba(0,0,0,0.7); min-width: 240px; max-width: 340px; pointer-events: none; }
         .tip-box .tip-title { color: #ffffff; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; margin-top: 6px; }
         .tip-box .tip-title:first-child { margin-top: 0; }
         .tip-box .tip-yes { color: #4ade80; padding: 2px 0; }
@@ -753,6 +752,35 @@
 
     function setStatus(s,t){document.getElementById('statusDot').className='status-dot'+(s==='fetching'?' fetching':s==='error'?' error':s==='off'?' off':'');document.getElementById('statusText').textContent=t;}
     function showLoading(v){document.getElementById('loading').classList.toggle('hidden',!v);}
+
+    // Dynamic tooltip positioning
+    document.addEventListener('mouseover', function(e) {
+        const tip = e.target.closest('.has-tip');
+        if (tip) {
+            const box = tip.querySelector('.tip-box');
+            if (box) {
+                const rect = tip.getBoundingClientRect();
+                box.style.display = 'block';
+                // Position to the right of the element, vertically aligned
+                let left = rect.right + 12;
+                let top = rect.top;
+                // If it would go off right edge, put it to the left
+                if (left + 280 > window.innerWidth) left = rect.left - 280;
+                // If it would go off bottom, move up
+                if (top + box.offsetHeight > window.innerHeight) top = window.innerHeight - box.offsetHeight - 10;
+                if (top < 10) top = 10;
+                box.style.left = left + 'px';
+                box.style.top = top + 'px';
+            }
+        }
+    });
+    document.addEventListener('mouseout', function(e) {
+        const tip = e.target.closest('.has-tip');
+        if (tip) {
+            const box = tip.querySelector('.tip-box');
+            if (box) box.style.display = 'none';
+        }
+    });
     function fmt(d){return d.getFullYear()+'-'+(d.getMonth()+1+'').padStart(2,'0')+'-'+(d.getDate()+'').padStart(2,'0')+'T'+(d.getHours()+'').padStart(2,'0')+':'+(d.getMinutes()+'').padStart(2,'0');}
     function time(){return new Date().toLocaleTimeString();}
 
