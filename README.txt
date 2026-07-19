@@ -1,183 +1,183 @@
-============================================================
-  STAFFING DASHBOARD - Pick Operations
-  HOU8 | Live Rate Monitor & Staffing Evaluator
-============================================================
+====================================================
+  PickMatrix v1.8
+  Pick Staffing Evaluator - HOU8
+  Created & managed by ttuyen
+====================================================
 
-WHAT THIS TOOL DOES:
-- Shows live UPH rates for all Pick process paths
-- Shows individual associates per path with their rates
-- Identifies who is CURRENTLY PICKING vs who was prior/inactive
-- Shows verified cross-training permissions (which paths each AA can work)
-- Recommends staffing moves based on 14-day historical performance
-- Auto-refreshes every 15 or 30 minutes
-- Learns from move decisions to improve recommendations over time
 
-============================================================
-FIRST TIME SETUP:
-============================================================
+QUICK START (3 steps):
 
-1. Make sure Python 3.10+ is installed
-   (Download from https://www.python.org/downloads/ if needed)
+  Step 1: Install Python
+    - Go to https://www.python.org/downloads/
+    - Download Python 3.12 or newer
+    - IMPORTANT: Check the box "Add Python to PATH" during install
+    - Click Install
 
-2. Run setup.bat (double-click it)
-   - This installs required Python packages
-   - Creates a desktop shortcut
+  Step 2: Log into FCLM
+    - Open Firefox
+    - Go to https://fclm-portal.amazon.com
+    - Log in with Midway (just need to visit the page once)
 
-3. Make sure Firefox is open and you're authenticated to:
-   https://fclm-portal.amazon.com
-   (Just visit the page once in Firefox - the tool auto-extracts your cookies)
+  Step 3: Run PickMatrix
+    - Open the PickMatrix folder
+    - Double-click "Start Dashboard.bat"
+    - Dashboard opens automatically at http://localhost:8787
+    - Keep the terminal window open while using the dashboard
 
-4. (Optional) For real-time active picker tracking:
-   - Install the OB Pick Center Tampermonkey script (v3.5+)
-   - Keep your Rodeo page open while using the dashboard
 
-============================================================
-HOW TO RUN:
-============================================================
+====================================================
+THAT'S IT. YOU'RE DONE.
+====================================================
 
-Option A: Double-click "Staffing Dashboard" shortcut on desktop
-Option B: Double-click run_staffing_dashboard.bat in this folder
-Option C: Open terminal and run: python staffing_dashboard_server.py
 
-The dashboard opens automatically in your browser at:
-http://localhost:8787
+FOR LIVE HEADCOUNT TRACKING (optional):
+  - Open Rodeo in your browser
+  - Make sure OB Pick Center Tampermonkey v3.5+ is installed
+  - Keep Rodeo open while using PickMatrix
+  - HC updates every 30 seconds automatically
 
-============================================================
-USING THE DASHBOARD:
-============================================================
+
+====================================================
+WHAT YOU'LL SEE ON THE DASHBOARD:
+====================================================
 
 TOP BAR:
-- Shift selector (Night/Day) - auto-detects based on time
-- Start/End time - defaults to current shift window
-- Apply - fetches data for custom time range
-- Reset - snaps back to shift start -> now
-- Auto-Refresh - 5/15/30 min or Off
-- Refresh Now - manual immediate refresh
+  - Shift selector (Night/Day)
+  - Start/End time for data window
+  - Auto-refresh interval (15 or 30 min)
+  - Refresh Now button
+
+SUMMARY:
+  - Paths count
+  - Hitting/Missing rate count
+  - Pick Total UPH
+  - Pick HC (live headcount)
+  - Attrition count
+  - X-Train availability per department
+  - Last Updated timestamp
+  - X-Train and History loading status
 
 PATH TABS:
-- "All Paths" - shows grid overview of all paths
-- Click any path name - shows full associate table
-- "X-Train Lookup" - search any login to see their permissions
+  - Click any path to see individual associates
+  - Shows HC per path
+  - Overview shows all path cards
 
-PATH CARDS:
-- Current UPH (color-coded: green=hitting, red=missing)
-- Goal UPH (editable - click to change)
-- Units and Hours
-- Progress bar with target marker
-- Rate vs Goal and % of Goal
+ASSOCIATE TABLE (click a path):
+  - CURRENTLY PICKING section (green header)
+  - PRIOR / INACTIVE section (grey, dimmed)
+  - Name, Login, Rate, Units, Hours, X-Train dots
+  - Hover name to see Strengths/Opportunities
+  - Move? button for staffing recommendations
 
-ASSOCIATE TABLE (click a path tab):
-- CURRENTLY PICKING section - green header, active pickers
-- PRIOR / INACTIVE section - grey header, dimmed, earlier pickers
-- Hover name/login to see recommended/not recommended paths
-- Rate pill color: green=above goal, yellow=at goal, red=below
-- X-Train dots show verified FCLM permissions
-- Move? button shows days of historical data, click for recommendation
+X-TRAIN TAB:
+  - Search any login
+  - Shows verified FCLM permissions per associate
+  - Color dots: Pick/Stow/Receive/Pack/Ship Dock/ICQA/VRets
 
-MOVE RECOMMENDATIONS:
-- Click the "Move?" button on any associate
-- Shows their 14-day performance history per path
-- Select a destination path and goal
-- Click "Analyze" for a verdict (GOOD MOVE / OKAY MOVE / RISKY MOVE / NO DATA)
-- Click "Confirm Move" to log the decision (system tracks outcome)
+ATTRITION TAB:
+  - Type login + departure time
+  - Tracks who's leaving early
+  - Shows in summary header
 
-============================================================
-RATE EXPECTATIONS (GOALS):
-============================================================
 
-Default goals (editable in dashboard or config):
-  RF Pick Singles:       50 UPH
-  OrderPickVNA:          35 UPH
-  Orderpicker Pick:      30 UPH
-  OrderPickLowDensityP:  20 UPH
-  OrderPick SIOC:        20 UPH
-  MultiRelayPick:        20 UPH
-  RF Pick:                5 UPH
-  Giftwrap Picking:       5 UPH
+====================================================
+HOW UPDATES WORK:
+====================================================
 
-To change defaults permanently, edit staffing_config.yaml
+  - Dashboard checks for updates automatically
+  - If available: orange "Update Now" button appears in footer
+  - Click it and wait 5 seconds - done
+  - Or just restart "Start Dashboard.bat" - it updates on launch
 
-============================================================
-FILES IN THIS FOLDER:
-============================================================
 
-MAIN FILES:
-  staffing_dashboard_server.py  - The server (run this)
-  staffing_dashboard.html       - Dashboard UI
-  staffing_config.yaml          - Configuration (goals, paths, settings)
-  config.yaml                   - FCLM auth settings (warehouse, cookies)
-
-MODULES:
-  cross_training.py             - Parses training CSV + FCLM permissions
-  rate_history.py               - Historical rate database (SQLite)
-  learning_engine.py            - Move tracking + recommendation learning
-  staffing_evaluator.py         - CLI-based staffing evaluator (original)
-
-LAUNCHERS:
-  run_staffing_dashboard.bat    - Launch the dashboard server
-  run_staffing_evaluator.bat    - Launch the CLI evaluator
-  setup.bat                     - First-time setup
-
-DATA FILES (auto-generated):
-  rate_history.db               - SQLite database (historical rates + moves)
-  last_response_debug.html      - Last FCLM response (for debugging)
-
-============================================================
-CROSS-TRAINING DATA:
-============================================================
-
-The tool reads Umbrella training data from:
-  C:\Users\<you>\Downloads\Certificate-tracking*.csv
-
-To update: Re-export from QuickSight and save to Downloads.
-The tool auto-finds the latest file on each startup.
-
-Verified against FCLM permissions (ground truth):
-- Only shows X-Train dots for associates with ACTUAL active permissions
-- Checks: Pick, Pack, Stow, Receive, Ship Dock, ICQA
-- Background check runs ~90 seconds after each data refresh
-
-============================================================
+====================================================
 TROUBLESHOOTING:
-============================================================
+====================================================
 
-"Loading from FCLM..." stuck:
-  - Make sure Firefox is open with an active Midway session
-  - Visit https://fclm-portal.amazon.com in Firefox to refresh session
-  - Restart the dashboard server
+  "Python not found":
+    - Reinstall Python from python.org
+    - Make sure "Add Python to PATH" is checked
+    - Restart your computer after install
 
-No X-Train dots showing:
-  - Wait ~90 seconds after startup (permissions check runs in background)
-  - Click "Refresh Now" to trigger a new check
+  Dashboard stuck on loading:
+    - Make sure Firefox is open
+    - Visit https://fclm-portal.amazon.com in Firefox
+    - Restart Start Dashboard.bat
 
-No "CURRENTLY PICKING" section:
-  - Make sure Rodeo is open with OB Pick Center v3.5+ Tampermonkey
-  - Check Rodeo console (F12) for "[Dashboard Bridge] Pushed XX pickers"
+  X-Train shows "loading" or "verifying":
+    - This takes ~90 seconds on startup
+    - Wait and it will auto-populate
+    - Status shows in footer and summary area
 
-Dashboard shows old data:
-  - Use Ctrl+Shift+R to hard refresh
-  - Or open in Incognito window
+  HC shows "--" or 0:
+    - Open Rodeo with OB Pick Center v3.5+
+    - HC updates every 30 seconds from Picking Console
 
-Port 8787 already in use:
-  - Close any other terminal running the dashboard
-  - Or change port in staffing_config.yaml under dashboard.port
+  No "Currently Picking" section:
+    - Same as above - needs Rodeo open
+    - Without Rodeo, all associates show in one list
 
-============================================================
-FOR DEVELOPERS:
-============================================================
+  Terminal closes immediately:
+    - Right-click Start Dashboard.bat > Run as administrator
+    - Or open Command Prompt, cd to PickMatrix folder, type:
+      python staffing_dashboard_server.py
 
-API Endpoints:
-  GET  /api/data              - Current dashboard data (JSON)
-  GET  /api/refresh           - Force immediate FCLM refresh
-  GET  /api/status            - Server status
-  GET  /api/history?employee_id=XXX  - Associate history
-  POST /api/set-time-range    - Change time window
-  POST /api/set-interval      - Change refresh interval
-  POST /api/set-shift         - Switch Night/Day shift
-  POST /api/recommend-move    - Get move recommendation
-  POST /api/verify-permissions - Check one associate's perms
-  POST /api/update-workforce  - Receive active picker data (from TM)
+  Data shows old/stale rates:
+    - Click "Refresh Now"
+    - Or wait for auto-refresh (15 min default)
+    - Change interval with the Auto-Refresh dropdown
 
-============================================================
-  Built by ttuyen | HOU8 Pick Operations
-============================================================
+
+====================================================
+HISTORICAL DATA:
+====================================================
+
+  - Tool automatically collects rate data each shift
+  - On first start, backfills last 14 days from FCLM
+  - Stored in: AppData\Local\PickMatrix\rate_history.db
+  - Survives updates and folder moves
+  - Used for move recommendations and hover tooltips
+  - 30-day retention, recommendations use last 14 days
+
+
+====================================================
+RATE GOALS (editable):
+====================================================
+
+  Default goals (click the number on dashboard to change):
+    RF Pick Singles:       50 UPH
+    OrderPickVNA:          35 UPH
+    Orderpicker Pick:      30 UPH
+    OrderPickLowDensityP:  20 UPH
+    OrderPick SIOC:        20 UPH
+    MultiRelayPick:        20 UPH
+    RF Pick:                5 UPH
+    Giftwrap Picking:       5 UPH
+
+  Goals save per browser (localStorage) - each user sets their own.
+  To change defaults for everyone: edit staffing_config.yaml
+
+
+====================================================
+FILES IN THIS FOLDER:
+====================================================
+
+  Start Dashboard.bat      <- DOUBLE CLICK THIS TO START
+  staffing_dashboard_server.py  - Server
+  staffing_dashboard.html       - Dashboard UI
+  fclm_rate_puller.py           - FCLM data fetcher
+  cross_training.py             - Permissions checker
+  rate_history.py               - Historical data + backfill
+  learning_engine.py            - Move recommendations AI
+  updater.py                    - Auto-update from GitHub
+  config.yaml                   - FCLM settings (warehouse)
+  staffing_config.yaml          - Goals and paths
+  Certificate-tracking.csv      - Training data for logins
+  requirements.txt              - Python packages
+  version.txt                   - Current version
+  README.txt                    - This file
+
+
+====================================================
+  PickMatrix v1.8 | ttuyen | HOU8 Pick Operations
+====================================================
