@@ -360,7 +360,7 @@
         for(const assocs of Object.values(data.associates_by_path||{})){
             for(const a of assocs){
                 if((a.paid_hours||0)<0.05) continue;
-                const login=a.login||a.employee_id||'';
+                const login=a.login||'';
                 if(activeLoginSet.size>0&&!activeLoginSet.has(login)) continue;
                 const perms=ctMap2[a.employee_id]||[];
                 for(const d of perms){if(d in deptAvail) deptAvail[d]++;}
@@ -770,12 +770,12 @@
         showLoading(false);setupAutoRefresh();startHCPoller();
     });
     </script>
-<div style="text-align:center;padding:12px;font-size:0.6rem;color:#636366;border-top:1px solid #38383a;margin-top:20px;">PickMatrix v1.3 | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>
+<div style="text-align:center;padding:12px;font-size:0.6rem;color:#636366;border-top:1px solid #38383a;margin-top:20px;">PickMatrix v1.2 | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>
 <script>
 // Check for updates on load
 fetch('https://raw.githubusercontent.com/ttuyen099/pick-staffing-evaluator/main/version.txt')
 .then(r=>r.text()).then(remote=>{
-    const local='1.3';
+    const local='1.2';
     remote=remote.trim();
     const el=document.getElementById('updateStatus');
     if(remote===local) el.innerHTML='<span style="color:#4ade80;">&#10003; Up to date</span>';

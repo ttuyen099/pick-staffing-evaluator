@@ -891,10 +891,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             import subprocess
             script_dir = os.path.dirname(os.path.abspath(__file__))
             updater_path = os.path.join(script_dir, "updater.py")
+            python_exe = sys.executable
             
             # Run updater
             result = subprocess.run(
-                [sys.executable, updater_path],
+                [python_exe, updater_path],
                 cwd=script_dir,
                 capture_output=True, text=True, timeout=30
             )
@@ -907,7 +908,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             def restart():
                 import time
                 time.sleep(2)
-                os.execv(sys.executable, [sys.executable] + [os.path.join(script_dir, "staffing_dashboard_server.py")])
+                server_path = os.path.join(script_dir, "staffing_dashboard_server.py")
+                subprocess.Popen([python_exe, server_path], cwd=script_dir)
+                os._exit(0)
+            threading.Thread(target=restart, daemon=True).start()
             threading.Thread(target=restart, daemon=True).start()
             
         except Exception as e:
