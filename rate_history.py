@@ -13,7 +13,10 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rate_history.db")
+# Store DB in a fixed location per user (survives folder moves/updates)
+_DB_DIR = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'PickMatrix')
+os.makedirs(_DB_DIR, exist_ok=True)
+DB_PATH = os.path.join(_DB_DIR, "rate_history.db")
 RETENTION_DAYS = 30
 
 

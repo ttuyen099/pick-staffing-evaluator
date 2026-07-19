@@ -21,7 +21,7 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rate_history.db")
+DB_PATH = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'PickMatrix', "rate_history.db")
 
 
 def _get_db():
