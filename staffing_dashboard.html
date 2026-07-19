@@ -220,13 +220,13 @@
     <div class="loading" id="loading"><div class="spinner"></div><span>Loading from FCLM...</span></div>
 
     <!-- Recommendation Modal -->
-    <div id="recModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#1c1c1edd;z-index:2000;display:none;align-items:center;justify-content:center;" onclick="closeRec()">
-        <div style="background:rgba(255,255,255,0.9);border:1px solid #38383a;border-radius:10px;padding:20px;max-width:500px;width:90%;max-height:80vh;overflow-y:auto;" onclick="event.stopPropagation()">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-                <h3 style="color:#fff;font-size:1rem;" id="recTitle">Move Recommendation</h3>
-                <button onclick="closeRec()" style="background:none;border:none;color:#64748b;font-size:1.2rem;cursor:pointer;">X</button>
+    <div id="recModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:2000;align-items:center;justify-content:center;" onclick="closeRec()">
+        <div style="background:#2c2c2e;border:1px solid #48484a;border-radius:16px;padding:24px;max-width:520px;width:90%;max-height:80vh;overflow-y:auto;" onclick="event.stopPropagation()">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 style="color:#ffffff;font-size:1.1rem;font-weight:600;" id="recTitle">Move Recommendation</h3>
+                <button onclick="closeRec()" style="background:#3a3a3c;border:none;color:#ffffff;font-size:1rem;cursor:pointer;width:28px;height:28px;border-radius:50%;line-height:28px;">X</button>
             </div>
-            <div id="recContent" style="font-size:0.8rem;color:#e0e0e0;"></div>
+            <div id="recContent" style="font-size:0.82rem;color:#e5e5ea;"></div>
         </div>
     </div>
 
@@ -617,9 +617,9 @@
             if (Object.keys(avgs).length > 0) {
                 html += `<div style="margin-bottom:14px;"><strong style="color:#fff;">14-Day History (${Object.keys(avgs).length} paths worked):</strong></div>`;
                 html += '<table style="width:100%;border-collapse:collapse;font-size:0.75rem;margin-bottom:14px;">';
-                html += '<tr style="border-bottom:1px solid #38383a;"><th style="text-align:left;padding:4px 8px;color:#64748b;">Path</th><th style="text-align:right;padding:4px 8px;color:#64748b;">Avg Rate</th><th style="text-align:right;padding:4px 8px;color:#64748b;">Shifts</th><th style="text-align:right;padding:4px 8px;color:#64748b;">Range</th></tr>';
+                html += '<tr style="border-bottom:1px solid #48484a;"><th style="text-align:left;padding:6px 8px;color:#98989d;">Path</th><th style="text-align:right;padding:6px 8px;color:#98989d;">Avg Rate</th><th style="text-align:right;padding:6px 8px;color:#98989d;">Shifts</th><th style="text-align:right;padding:6px 8px;color:#98989d;">Range</th></tr>';
                 for (const [path, stats] of Object.entries(avgs)) {
-                    html += `<tr style="border-bottom:1px solid #2c2c2e;"><td style="padding:4px 8px;">${path}</td><td style="text-align:right;padding:4px 8px;font-weight:600;color:#4ade80;">${stats.avg_rate}</td><td style="text-align:right;padding:4px 8px;">${stats.total_shifts}</td><td style="text-align:right;padding:4px 8px;color:#94a3b8;">${stats.min_rate} - ${stats.max_rate}</td></tr>`;
+                    html += `<tr style="border-bottom:1px solid #38383a;"><td style="padding:6px 8px;color:#e5e5ea;">${path}</td><td style="text-align:right;padding:6px 8px;font-weight:600;color:#4ade80;">${stats.avg_rate}</td><td style="text-align:right;padding:6px 8px;color:#e5e5ea;">${stats.total_shifts}</td><td style="text-align:right;padding:6px 8px;color:#98989d;">${stats.min_rate} - ${stats.max_rate}</td></tr>`;
                 }
                 html += '</table>';
             } else {
