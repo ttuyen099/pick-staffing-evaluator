@@ -761,10 +761,12 @@
             if (box) {
                 const rect = tip.getBoundingClientRect();
                 box.style.display = 'block';
-                // Always position: right of the name column, vertically centered in viewport
+                // Position relative to viewport (fixed), clamped within visible area
                 let left = Math.min(rect.right + 12, window.innerWidth - 300);
                 if (left < 10) left = 10;
-                let top = Math.max(10, Math.min(rect.top, window.innerHeight - 220));
+                // Place at the row's Y position, but clamp between 60px from top and 210px from bottom
+                let top = rect.top;
+                top = Math.max(60, Math.min(top, window.innerHeight - 210));
                 box.style.left = left + 'px';
                 box.style.top = top + 'px';
             }
