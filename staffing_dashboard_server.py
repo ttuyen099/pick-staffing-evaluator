@@ -909,7 +909,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 import time
                 time.sleep(2)
                 server_path = os.path.join(script_dir, "staffing_dashboard_server.py")
-                subprocess.Popen([python_exe, server_path], cwd=script_dir)
+                subprocess.Popen([python_exe, server_path, "--no-browser"], cwd=script_dir)
                 os._exit(0)
             threading.Thread(target=restart, daemon=True).start()
             threading.Thread(target=restart, daemon=True).start()
@@ -975,8 +975,9 @@ def main():
     print(f"\n  Dashboard running at: {url}")
     print(f"  Auto-refresh: every {refresh_interval} minutes")
     
-    # Open browser
-    webbrowser.open(url)
+    # Open browser (skip if restarting from update)
+    if "--no-browser" not in sys.argv:
+        webbrowser.open(url)
     
     # Now do initial data fetch (browser will retry until ready)
     print("  Performing initial data fetch...")
