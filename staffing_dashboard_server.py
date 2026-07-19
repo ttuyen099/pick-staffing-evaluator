@@ -867,13 +867,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
             # Paths to exclude (not pick paths)
             EXCLUDE_PATHS = {'PPTrans', 'PPQA', 'PPTransOut', 'PPTransIn', 'PPICQA', 'PPCount', 'PPRebinHotpick', 'PPRebin'}
             
-            # Build picker set: { fclm_path: list of logins } - includes ALL assigned pickers
+            # Build picker set: { fclm_path: list of logins } - only known pick paths
             active_by_path = {}
             for p in pickers:
                 pp_raw = p.get("processPath", "")
                 if pp_raw in EXCLUDE_PATHS or pp_raw.startswith('PPTrans') or pp_raw.startswith('PPQA'):
                     continue
-                pp = PATH_MAP.get(pp_raw, pp_raw)  # Map to FCLM name
+                pp = PATH_MAP.get(pp_raw)  # Only include if mapped
+                if not pp:
+                    continue  # Skip unmapped paths
                 login = p.get("userId") or p.get("login", "")
                 if pp and login:
                     if pp not in active_by_path:
