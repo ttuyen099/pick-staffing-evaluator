@@ -596,17 +596,18 @@
             const pathRates=histInfo.path_rates;
             const allExp=data.rate_expectations||{};
             const defE=data.default_rate_expectation||5;
-            let goodPaths=[],badPaths=[];
+            let goodPaths=[],badPaths=[],currentPathRate=null;
             for(const [pw,stats] of Object.entries(pathRates)){
-                if(pw===p.name) continue;
+                if(pw===p.name){currentPathRate=stats;continue;}
                 const goal=getGoal(pw,allExp[pw]||defE);
-                if(stats.avg_rate>=goal) goodPaths.push({path:pw,rate:stats.avg_rate,goal});
-                else badPaths.push({path:pw,rate:stats.avg_rate,goal});
+                if(stats.avg_rate>=goal) goodPaths.push({path:pw,rate:stats.avg_rate,goal,shifts:stats.shifts});
+                else badPaths.push({path:pw,rate:stats.avg_rate,goal,shifts:stats.shifts});
             }
-            if(goodPaths.length>0){tipContent+=`<div class="tip-title">STRENGTHS:</div>`;for(const g of goodPaths)tipContent+=`<div class="tip-yes">&#10003; ${g.path}: ${g.rate} avg (goal ${g.goal})</div>`;}
-            if(badPaths.length>0){tipContent+=`<div class="tip-title" style="margin-top:4px;">OPPORTUNITIES:</div>`;for(const b of badPaths)tipContent+=`<div class="tip-no">&#10007; ${b.path}: ${b.rate} avg (goal ${b.goal})</div>`;}
-            if(!goodPaths.length&&!badPaths.length) tipContent=`<div style="color:#94a3b8;">Only worked ${p.name}</div>`;
-        } else { tipContent=`<div style="color:#64748b;">No historical data yet</div>`; }
+            if(currentPathRate) tipContent+=`<div style="color:#98989d;margin-bottom:4px;">Current: ${p.name} ${currentPathRate.avg_rate} UPH (${currentPathRate.shifts} shifts)</div>`;
+            if(goodPaths.length>0){tipContent+=`<div class="tip-title">STRENGTHS:</div>`;for(const g of goodPaths)tipContent+=`<div class="tip-yes">&#10003; ${g.path}: ${g.rate} avg (${g.shifts}d)</div>`;}
+            if(badPaths.length>0){tipContent+=`<div class="tip-title" style="margin-top:4px;">OPPORTUNITIES:</div>`;for(const b of badPaths)tipContent+=`<div class="tip-no">&#10007; ${b.path}: ${b.rate} avg (${b.shifts}d)</div>`;}
+            if(!goodPaths.length&&!badPaths.length&&!currentPathRate) tipContent+=`<div style="color:#636366;">Collecting data...</div>`;
+        } else { tipContent=`<div style="color:#636366;">Collecting data...</div>`; }
         const rowClass=isInactive?`${pfc} inactive`:pfc;
         return `<tr class="${rowClass}"><td class="has-tip">${a.name||''}<div class="tip-box">${tipContent}</div></td><td class="has-tip" style="color:#94a3b8;">${login}<div class="tip-box">${tipContent}</div></td><td><span class="rate-pill ${pfc}">${(a.rate||0).toFixed(1)}</span></td><td>${a.units||0}</td><td>${(a.paid_hours||0).toFixed(1)}</td><td><span class="ct-dots">${dots||'--'}</span></td><td><button onclick="event.stopPropagation();showRecommend('${a.employee_id}','${p.name}','${a.name||login}')" style="background:#3a3a3c;color:#e0e0e0;border:1px solid #38383a;border-radius:3px;padding:2px 6px;font-size:0.65rem;cursor:pointer;">${histDays?histDays+'d':'?'}</button></td></tr>`;
     }

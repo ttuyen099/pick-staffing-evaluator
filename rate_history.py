@@ -383,10 +383,9 @@ def backfill_history(config, days=14):
     logger.info("Backfill: %d missing dates to fill", len(dates_to_check))
     
     for d in dates_to_check:
-        # Query full 24 hours: 6:00 AM today to 6:00 AM next day
-        # This captures ALL associates from both Day shift (7:30AM-6PM) and Night shift (6:30PM-5AM)
+        # Query same day: 6:00 AM to 11:59 PM (stays within maxIntradayDays=1)
+        # This captures Day shift (7:30AM-6PM) and start of Night shift (6:30PM-midnight)
         start_str = d.strftime("%Y/%m/%d")
-        next_day = (d + timedelta(days=1)).strftime("%Y/%m/%d")
         
         url = (
             f"https://fclm-portal.amazon.com/reports/functionRollup?reportFormat=HTML"
@@ -397,9 +396,9 @@ def backfill_history(config, days=14):
             f"&startDateIntraday={start_str}"
             f"&startHourIntraday=6"
             f"&startMinuteIntraday=0"
-            f"&endDateIntraday={next_day}"
-            f"&endHourIntraday=6"
-            f"&endMinuteIntraday=0"
+            f"&endDateIntraday={start_str}"
+            f"&endHourIntraday=23"
+            f"&endMinuteIntraday=59"
         )
         
         logger.info("  Backfilling %s...", d.strftime("%Y-%m-%d"))
