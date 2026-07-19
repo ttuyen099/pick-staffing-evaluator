@@ -1,0 +1,7 @@
+requests==2.31.0
+pyyaml==6.0.1
+beautifulsoup4==4.12.3
+
+# Only needed if using chrome_auto method (Firefox needs no extra deps):
+# pywin32==306
+# pycryptodome==3.20.0

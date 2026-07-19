@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PickMatrix - HOU8</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #000000; color: #ffffff; min-height: 100vh; }
+
+        /* Control Bar */
+        .control-bar { position: sticky; top: 0; z-index: 100; background: rgba(28,28,30,0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid #38383a; padding: 10px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+        .logo { font-weight: 300; font-size: 1.2rem; color: #ffffff; white-space: nowrap; letter-spacing: -0.5px; }
+        .logo span { color: #007aff; font-weight: 600; }
+        .control-group { display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: #000000; border: 1px solid #38383a; border-radius: 8px; }
+        .control-group label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.5px; color: #98989d; white-space: nowrap; }
+        .control-group input, .control-group select { background: rgba(28,28,30,0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid #38383a; color: #ffffff; padding: 3px 6px; border-radius: 3px; font-size: 0.75rem; font-family: inherit; }
+        .control-group input:focus, .control-group select:focus { outline: none; border-color: #007aff; }
+        .btn { background: #007aff; color: white; border: none; padding: 5px 12px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; font-weight: 500; white-space: nowrap; }
+        .btn:hover { background: #0056b3; }
+        .btn.secondary { background: #3a3a3c; color: #ffffff; }
+        .btn.secondary:hover { background: #4b5563; }
+        .status-area { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: #98989d; margin-left: auto; }
+        .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; animation: pulse 2s infinite; }
+        .status-dot.fetching { background: #fbbf24; animation: none; }
+        .status-dot.error { background: #f87171; animation: none; }
+        .status-dot.off { background: #64748b; animation: none; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+        /* Main */
+        .main { padding: 16px 20px; }
+
+        /* Summary Chips */
+        .summary { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+        .chip { background: rgba(28,28,30,0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid #38383a; border-radius: 7px; padding: 10px 16px; }
+        .chip-val { font-size: 1.4rem; font-weight: 700; }
+        .chip-lbl { font-size: 0.6rem; color: #98989d; text-transform: uppercase; letter-spacing: 0.5px; }
+        .green { color: #4ade80; } .red { color: #f87171; } .yellow { color: #fbbf24; } .blue { color: #007aff; }
+
+        /* Path Grid */
+        .path-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; align-items: start; }
+
+        /* Path Tabs - sticky below control bar */
+        .path-tabs { display: flex; gap: 6px; padding: 10px 20px; background: rgba(28,28,30,0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid #38383a; flex-wrap: wrap; position: sticky; top: 50px; z-index: 90; }
+        .path-tab { padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; cursor: pointer; border: 1px solid #38383a; background: #2c2c2e; color: #98989d; transition: all 0.15s; white-space: nowrap; }
+        .path-tab:hover { border-color: #007aff; color: #ffffff; }
+        .path-tab.active { background: #007aff; border-color: #007aff; color: #ffffff; font-weight: 600; }
+        .path-tab.hitting { border-left: 3px solid #4ade80; }
+        .path-tab.missing { border-left: 3px solid #f87171; }
+        .path-tab .tab-rate { font-size: 0.65rem; margin-left: 4px; opacity: 0.7; }
+
+        .path-card { background: rgba(28,28,30,0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid #38383a; border-radius: 12px; padding: 14px 16px; position: relative; cursor: pointer; transition: border-color 0.15s; overflow: visible; }
+        .path-card:hover { border-color: #3b5068; }
+        .path-card.hitting { border-left: 4px solid #4ade80; }
+        .path-card.missing { border-left: 4px solid #f87171; }
+
+        .path-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .path-name { font-weight: 700; font-size: 0.95rem; color: #fffffffff; text-shadow: 0 0 1px rgba(255,255,255,0.3); }
+        .path-badge { font-size: 0.65rem; padding: 2px 8px; border-radius: 3px; font-weight: 700; }
+        .path-badge.hit { background: #34c75915; color: #4ade80; }
+        .path-badge.miss { background: #ff3b3015; color: #f87171; }
+
+        /* Hide number input spinners */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+
+        .path-metrics { display: flex; gap: 16px; margin-bottom: 12px; }
+        .pm { text-align: center; }
+        .pm-val { font-size: 1.1rem; font-weight: 700; }
+        .pm-lbl { font-size: 0.55rem; color: #98989d; text-transform: uppercase; letter-spacing: 0.3px; }
+
+        /* Progress bar */
+        .progress-wrap { margin-bottom: 12px; }
+        .progress-bar { height: 5px; background: #3a3a3c; border-radius: 3px; position: relative; }
+        .progress-fill { height: 100%; border-radius: 3px; }
+        .progress-fill.hit { background: linear-gradient(90deg, #22c55e, #4ade80); }
+        .progress-fill.miss { background: linear-gradient(90deg, #dc2626, #f87171); }
+        .progress-marker { position: absolute; top: -4px; width: 2px; height: 13px; background: #007aff; border-radius: 1px; }
+
+        .path-footer { display: flex; justify-content: space-between; font-size: 0.75rem; color: #98989d; }
+        .path-footer .val { color: #ffffff; font-weight: 500; }
+        .path-footer .val.pos { color: #4ade80; }
+        .path-footer .val.neg { color: #f87171; }
+
+        /* Expandable associate section */
+        .path-expand { display: none; margin-top: 12px; border-top: 1px solid #38383a; padding-top: 10px; overflow: visible; }
+        .path-expand.open { display: block; }
+
+        .assoc-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; table-layout: auto; }
+        .assoc-table th { padding: 8px 8px; text-align: left; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; color: #636366; border-bottom: 1px solid #38383a; background: #000000; white-space: nowrap; }
+        .assoc-table th:nth-child(3),
+        .assoc-table th:nth-child(4),
+        .assoc-table th:nth-child(5) { text-align: right; }
+        .assoc-table th:nth-child(6),
+        .assoc-table th:nth-child(7) { text-align: center; }
+        .assoc-table td { padding: 8px 8px; border-bottom: 1px solid #2c2c2e; vertical-align: middle; }
+        .assoc-table td:nth-child(3),
+        .assoc-table td:nth-child(4),
+        .assoc-table td:nth-child(5) { text-align: right; font-variant-numeric: tabular-nums; }
+        .assoc-table td:nth-child(6),
+        .assoc-table td:nth-child(7) { text-align: center; }
+        .assoc-table tr:hover td { background: #1e3a5f15; }
+        .assoc-table tr.above { border-left: 3px solid #4ade80; }
+        .assoc-table tr.at { border-left: 3px solid #fbbf24; }
+        .assoc-table tr.below { border-left: 3px solid #f87171; }
+        .rate-pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.8rem; min-width: 40px; text-align: center; }
+        .rate-pill.above { background: #34c75910; color: #4ade80; }
+        .rate-pill.at { background: #ff9f0a10; color: #fbbf24; }
+        .rate-pill.below { background: #ff3b3010; color: #f87171; }
+
+        /* Cross-training dots */
+        .ct-dots { display: inline-flex; gap: 4px; }
+        .ct-d { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+        /* Live indicator */
+        .live-badge { display: inline-block; font-size: 0.55rem; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+        .live-badge.on { background: #34c75920; color: #4ade80; border: 1px solid #4ade8050; }
+        .live-badge.off { background: #47556925; color: #98989d; border: 1px solid #47556950; }
+        .assoc-table tr.inactive { opacity: 0.4; }
+        .assoc-table tr.inactive td:first-child { border-left-color: #374151 !important; }
+        .ct-d.pick { background: #4ade80; }
+        .ct-d.stow { background: #fbbf24; }
+        .ct-d.receive { background: #f472b6; }
+        .ct-d.pack { background: #f87171; }
+        .ct-d.ship-dock { background: #1d4ed8; }
+        .ct-d.ib-dock { background: #c084fc; }
+        .ct-d.icqa { background: #2dd4bf; }
+        .ct-d.vrets { background: #e879f9; }
+
+        /* Cross-training section */
+        .ct-section { margin-top: 20px; background: rgba(28,28,30,0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid #38383a; border-radius: 12px; overflow: hidden; }
+        .ct-head { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .ct-head:hover { background: #2c2c2e; }
+        .ct-head h3 { font-size: 0.9rem; font-weight: 600; color: #ffffff; }
+        .ct-head .ct-toggle { font-size: 0.7rem; color: #98989d; }
+        .ct-body { display: none; padding: 12px 16px; border-top: 1px solid #38383a; }
+        .ct-body.open { display: block; }
+        .ct-legend { display: flex; gap: 12px; margin-bottom: 10px; font-size: 0.65rem; color: #98989d; flex-wrap: wrap; }
+        .ct-legend-item { display: flex; align-items: center; gap: 4px; }
+        .ct-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+        .ct-tab { padding: 4px 10px; background: #000000; border: 1px solid #38383a; border-radius: 4px; font-size: 0.7rem; cursor: pointer; color: #98989d; }
+        .ct-tab:hover { border-color: #007aff; color: #ffffff; }
+        .ct-tab.active { background: #007aff; border-color: #007aff; color: #ffffff; }
+        .ct-tab .cnt { font-size: 0.6rem; margin-left: 3px; opacity: 0.7; }
+        .ct-list { display: flex; flex-wrap: wrap; gap: 5px; max-height: 300px; overflow-y: auto; }
+        .ct-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; background: #000000; border: 1px solid #38383a; border-radius: 4px; font-size: 0.7rem; }
+
+        /* Loading */
+        .loading { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 1000; flex-direction: column; gap: 12px; }
+
+        /* Tooltip */
+        .has-tip { position: relative; cursor: help; }
+        .has-tip:hover .tip-box { display: block; }
+        .tip-box { display: none; position: absolute; left: 0; bottom: 100%; z-index: 100; background: #1e293b; border: 1px solid #007aff; border-radius: 12px; padding: 10px 14px; font-size: 0.75rem; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,0.6); margin-bottom: 6px; min-width: 200px; }
+        .tip-box .tip-title { color: #ffffff; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; margin-top: 6px; }
+        .tip-box .tip-title:first-child { margin-top: 0; }
+        .tip-box .tip-yes { color: #4ade80; padding: 2px 0; }
+        .tip-box .tip-no { color: #f87171; padding: 2px 0; }
+        .loading.hidden { display: none; }
+        .spinner { width: 32px; height: 32px; border: 3px solid #38383a; border-top-color: #007aff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 768px) { .path-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="control-bar">
+        <div class="logo">Pick<span>Matrix</span></div>
+        <div class="control-group">
+            <label>Shift</label>
+            <select id="shiftSelect" onchange="changeShift()">
+                <option value="night">Night (6:30PM - 5:00AM)</option>
+                <option value="day">Day (7:30AM - 6:00PM)</option>
+            </select>
+        </div>
+        <div class="control-group"><label>Start</label><input type="datetime-local" id="startTime" step="900"></div>
+        <div class="control-group"><label>End</label><input type="datetime-local" id="endTime" step="900"></div>
+        <button class="btn" onclick="applyTimeRange()">Apply</button>
+        <button class="btn secondary" onclick="resetToShift()">Reset</button>
+        <div class="control-group">
+            <label>Auto-Refresh</label>
+            <select id="refreshInterval" onchange="changeInterval()">
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+                <option value="5">5 min</option>
+                <option value="0">Off</option>
+            </select>
+        </div>
+        <button class="btn secondary" onclick="manualRefresh()">Refresh Now</button>
+        <div class="status-area">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Loading...</span>
+            <span id="countdown" style="font-size:0.65rem;color:#475569;"></span>
+        </div>
+    </div>
+
+    <div style="display:flex;gap:16px;padding:7px 20px;background:rgba(28,28,30,0.95);border-bottom:1px solid #38383a;font-size:0.75rem;color:#e5e5ea;flex-wrap:wrap;align-items:center;">
+        <span style="font-weight:600;color:#fff;">Cross-training:</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#4ade80;display:inline-block;"></span>Pick</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#fbbf24;display:inline-block;"></span>Stow</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#f472b6;display:inline-block;"></span>Receive</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#f87171;display:inline-block;"></span>Pack</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#1d4ed8;display:inline-block;"></span>Ship Dock</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#c084fc;display:inline-block;"></span>IB Dock</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#2dd4bf;display:inline-block;"></span>ICQA</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#e879f9;display:inline-block;"></span>VRets</span>
+        <span style="margin-left:16px;font-weight:600;color:#fff;">Rate:</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#4ade80;display:inline-block;"></span>Above</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#fbbf24;display:inline-block;"></span>At</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#f87171;display:inline-block;"></span>Below</span>
+    </div>
+
+    <div class="main">
+        <div class="summary" id="summary"></div>
+        <div class="path-tabs" id="pathTabs"></div>
+        <div class="path-grid" id="pathGrid"></div>
+    </div>
+
+    <div class="loading" id="loading"><div class="spinner"></div><span>Loading from FCLM...</span></div>
+
+    <!-- Recommendation Modal -->
+    <div id="recModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#1c1c1edd;z-index:2000;display:none;align-items:center;justify-content:center;" onclick="closeRec()">
+        <div style="background:rgba(255,255,255,0.9);border:1px solid #38383a;border-radius:10px;padding:20px;max-width:500px;width:90%;max-height:80vh;overflow-y:auto;" onclick="event.stopPropagation()">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                <h3 style="color:#fff;font-size:1rem;" id="recTitle">Move Recommendation</h3>
+                <button onclick="closeRec()" style="background:none;border:none;color:#64748b;font-size:1.2rem;cursor:pointer;">X</button>
+            </div>
+            <div id="recContent" style="font-size:0.8rem;color:#e0e0e0;"></div>
+        </div>
+    </div>
+
+    <script>
+    let data = null, refreshTimer = null, countdownTimer = null, nextRefresh = null, refreshMin = 15;
+    let openPaths = new Set(), ctOpen = false, ctDept = 'All', selectedPath = null;
+    let customGoals = JSON.parse(localStorage.getItem('staffing_goals') || '{}');
+    const API = window.location.origin;
+    const DC = {'Pick':'pick','Stow':'stow','Receive':'receive','Pack':'pack','Ship Dock':'ship-dock','IB Dock':'ib-dock','ICQA':'icqa','VRets':'vrets'};
+
+    function getGoal(pathName, serverExp) {
+        return customGoals[pathName] !== undefined ? customGoals[pathName] : serverExp;
+    }
+
+    function updateGoal(input) {
+        const pathName = input.dataset.path;
+        const val = parseFloat(input.value) || 0;
+        customGoals[pathName] = val;
+        localStorage.setItem('staffing_goals', JSON.stringify(customGoals));
+        render();
+    }
+
+    function pf(rate, exp, tol) { if (rate >= exp) return 'above'; if (rate >= exp*(1-(tol||0.05))) return 'at'; return 'below'; }
+
+    async function fetchData(retries=10) { for(let i=0;i<retries;i++){ try { const r=await fetch(API+'/api/data'); if(r.ok){data=await r.json();return true;} if(r.status===503){setStatus('fetching','Server fetching FCLM data... (attempt '+(i+1)+')');} } catch(e){setStatus('fetching','Connecting to server...');} if(i<retries-1) await new Promise(r=>setTimeout(r,2000)); } return false; }
+
+    async function applyTimeRange() {
+        const s=document.getElementById('startTime').value, e=document.getElementById('endTime').value;
+        if(!s||!e)return; showLoading(true); setStatus('fetching','Fetching...');
+        try {
+            const r=await fetch(API+'/api/set-time-range',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start_time:s,end_time:e})});
+            const res=await r.json();
+            if(res.success&&res.data){data=res.data;render();setStatus('ok','Updated '+time());}
+            else if(res.success){setStatus('ok','No data for this time range');} 
+            else{setStatus('error','Fetch failed');}
+        } catch(e){setStatus('error','Connection error');}
+        showLoading(false);
+    }
+
+    async function manualRefresh() {
+        showLoading(true); setStatus('fetching','Refreshing...');
+        try { const r=await fetch(API+'/api/refresh'); const res=await r.json(); if(res.success&&res.data){data=res.data;render();setStatus('ok','Refreshed '+time());resetCountdown();}else setStatus('error','Failed'); } catch(e){setStatus('error','Error');}
+        showLoading(false);
+    }
+
+    function changeInterval() { refreshMin=parseInt(document.getElementById('refreshInterval').value); fetch(API+'/api/set-interval',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({interval_minutes:refreshMin})}).catch(()=>{}); setupAutoRefresh(); }
+    function getShiftWindow() {
+        const shift = document.getElementById('shiftSelect').value;
+        const now = new Date();
+        let start = new Date(now), end = new Date(now);
+        
+        if (shift === 'night') {
+            // Night: 6:30PM - 5:00AM
+            if (now.getHours() < 5 || (now.getHours() === 5 && now.getMinutes() === 0)) {
+                // We're in the AM portion (after midnight)
+                start.setDate(start.getDate() - 1);
+                start.setHours(18, 30, 0, 0);
+                end.setHours(5, 0, 0, 0);
+            } else if (now.getHours() >= 18 && now.getMinutes() >= 30) {
+                // We're after 6:30PM (shift has started)
+                start.setHours(18, 30, 0, 0);
+                end.setDate(end.getDate() + 1);
+                end.setHours(5, 0, 0, 0);
+            } else if (now.getHours() >= 18) {
+                // Between 6:00PM and 6:30PM (shift hasn't started yet)
+                start.setHours(18, 30, 0, 0);
+                end.setDate(end.getDate() + 1);
+                end.setHours(5, 0, 0, 0);
+            } else {
+                // During the day but night shift selected - use tonight's shift
+                start.setHours(18, 30, 0, 0);
+                end.setDate(end.getDate() + 1);
+                end.setHours(5, 0, 0, 0);
+            }
+        } else {
+            // Day: 7:30AM - 6:00PM
+            start.setHours(7, 30, 0, 0);
+            end.setHours(18, 0, 0, 0);
+        }
+        
+        return { start, end };
+    }
+
+    function changeShift() {
+        const shift = document.getElementById('shiftSelect').value;
+        localStorage.setItem('staffing_shift', shift);
+        // Also tell server to filter cross-training by this shift
+        fetch(API + '/api/set-shift', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({shift:shift})}).catch(()=>{});
+        const w = getShiftWindow();
+        document.getElementById('startTime').value = fmt(w.start);
+        document.getElementById('endTime').value = fmt(w.end);
+        applyTimeRange();
+    }
+
+    function resetToShift() { const w=getShiftWindow(); document.getElementById('startTime').value=fmt(w.start); document.getElementById('endTime').value=fmt(w.end); applyTimeRange(); }
+
+    function render() {
+        if(!data) return;
+        const paths=data.paths||{}, abp=data.associates_by_path||{}, exp=data.rate_expectations||{}, defExp=data.default_rate_expectation||5, tol=data.tolerance||0.05, ctMap=data.cross_training_by_employee_id||{};
+        // Don't overwrite time inputs - user controls these via shift selector or manual entry
+
+        let totalPaths=Object.keys(paths).length, hitting=0;
+        const pathList=[];
+        for(const [name,pd] of Object.entries(paths)){
+            const e=getGoal(name, exp[name]||defExp), r=pd.rate||0; if(r>=e)hitting++;
+            pathList.push({name,rate:r,expected:e,hours:pd.hours_staffed||0,units:pd.units||0,hitting:r>=e,gap:r-e,assocs:abp[name]||[]});
+        }
+        pathList.sort((a,b)=>a.hitting!==b.hitting?(a.hitting?1:-1):a.gap-b.gap);
+
+        // Summary
+        const totalUnits = pathList.reduce((s,p)=>s+p.units,0);
+        const totalHours = pathList.reduce((s,p)=>s+p.hours,0);
+        const totalUPH = totalHours > 0 ? (totalUnits/totalHours).toFixed(1) : '0.0';
+        const aw=data.active_workforce||{};
+        const totalActiveHC = Object.values(aw).reduce((s,v)=>s+v.length,0);
+        document.getElementById('summary').innerHTML=`
+            <div class="chip"><div class="chip-val blue">${totalPaths}</div><div class="chip-lbl">Paths</div></div>
+            <div class="chip"><div class="chip-val green">${hitting}</div><div class="chip-lbl">Hitting Rate</div></div>
+            <div class="chip"><div class="chip-val red">${totalPaths-hitting}</div><div class="chip-lbl">Missing Rate</div></div>
+            <div class="chip"><div class="chip-val" style="color:#fff;">${totalUPH}</div><div class="chip-lbl">Pick Total UPH</div></div>
+            <div class="chip"><div class="chip-val blue">${totalActiveHC||'--'}</div><div class="chip-lbl">Pick HC</div></div>
+            <div class="chip"><div class="chip-val" style="color:#ff9500;">${getAttrition().length}</div><div class="chip-lbl">Attrition${(()=>{const a=getAttrition();if(!a.length)return '';const byTime={};a.forEach(x=>{const t=x.departing||'?';byTime[t]=(byTime[t]||0)+1;});return '<br><span style=\"font-size:0.55rem;color:#98989d;\">'+Object.entries(byTime).map(([t,c])=>c+' @ '+t).join(', ')+'</span>';})()}</div></div>
+            <div class="chip" style="margin-left:auto;"><div class="chip-val" style="font-size:0.85rem;color:#98989d;">${data.timestamp||'--'}</div><div class="chip-lbl">Last Updated</div></div>
+        `;
+        
+        // X-Train availability - count active pickers with verified perms for other depts
+        const ctMap2=data.cross_training_by_employee_id||{};
+        const deptAvail={Stow:0,Pack:0,Receive:0,'Ship Dock':0,ICQA:0};
+        const activeLoginSet=new Set();
+        Object.values(aw).forEach(logins=>logins.forEach(l=>activeLoginSet.add(l)));
+        for(const assocs of Object.values(data.associates_by_path||{})){
+            for(const a of assocs){
+                if((a.paid_hours||0)<0.05) continue;
+                const login=a.login||'';
+                if(activeLoginSet.size>0&&!activeLoginSet.has(login)) continue;
+                const perms=ctMap2[a.employee_id]||[];
+                for(const d of perms){if(d in deptAvail) deptAvail[d]++;}
+            }
+        }
+        const deptColors2={Stow:'#fbbf24',Pack:'#f87171',Receive:'#f472b6','Ship Dock':'#1d4ed8',ICQA:'#2dd4bf'};
+        let xChips='';
+        for(const [dept,count] of Object.entries(deptAvail)){
+            xChips+=`<div class="chip"><div class="chip-val" style="color:${deptColors2[dept]}">${count}</div><div class="chip-lbl">X → ${dept}</div></div>`;
+        }
+        document.getElementById('summary').innerHTML+=xChips;
+
+        // Path tabs
+        let tabsHtml = `<div class="path-tab ${!selectedPath&&selectedPath!=='xtrain'?'active':''}" onclick="selectPath(null)">Overview</div>`;
+        for(const p of pathList){
+            const isActive = selectedPath === p.name;
+            const pathHC = (aw[p.name]||[]).length;
+            const hcLabel = pathHC > 0 ? pathHC : p.assocs.filter(a=>(a.paid_hours||0)>=0.05).length;
+            tabsHtml += `<div class="path-tab ${isActive?'active':''} ${p.hitting?'hitting':'missing'}" onclick="selectPath('${p.name}')">${p.name}<span class="tab-rate">${hcLabel} HC</span></div>`;
+        }
+        tabsHtml += `<div class="path-tab ${selectedPath==='attrition'?'active':''}" onclick="selectPath('attrition')" style="border-color:#ff950050;">Attrition<span class="tab-rate">${getAttrition().length}</span></div>`;
+        tabsHtml += `<div class="path-tab ${selectedPath==='xtrain'?'active':''}" onclick="selectPath('xtrain')" style="margin-left:auto;border-color:#007aff50;">X-Train Lookup ${data.xtrain_status==='ready'?'<span style=\"color:#4ade80;font-size:0.6rem;\">&#9679; '+data.xtrain_count+'</span>':'<span style=\"color:#fbbf24;font-size:0.6rem;\">loading...</span>'}</div>`;
+        document.getElementById('pathTabs').innerHTML = tabsHtml;
+
+        // Path cards
+        let html='';
+        if(selectedPath==='attrition'){
+            const attrList=getAttrition();
+            html=`<div style="background:rgba(44,44,46,0.95);border:1px solid #38383a;border-radius:12px;padding:20px;">
+                <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
+                    <h3 style="color:#ffffff;font-size:1rem;">Attrition Tracker</h3>
+                    <span style="color:#ff9500;font-size:0.8rem;font-weight:600;">${attrList.length} leaving early</span>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap;position:relative;">
+                    <div style="position:relative;">
+                        <input type="text" id="attritionInput" placeholder="Enter login..." autocomplete="off" style="width:200px;background:#1c1c1e;border:1px solid #48484a;color:#ffffff;padding:8px 12px;border-radius:8px;font-size:0.8rem;" oninput="showAttrSuggestions()" onkeypress="if(event.key==='Enter')addAttrition()">
+                        <div id="attrSuggestions" style="display:none;position:absolute;top:100%;left:0;width:200px;max-height:150px;overflow-y:auto;background:#2c2c2e;border:1px solid #48484a;border-radius:8px;margin-top:4px;z-index:200;"></div>
+                    </div>
+                    <input type="time" id="attritionTime" style="background:#1c1c1e;border:1px solid #48484a;color:#ffffff;padding:8px 12px;border-radius:8px;font-size:0.8rem;">
+                    <button onclick="addAttrition()" style="background:#ff9500;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:0.8rem;cursor:pointer;font-weight:500;">Add</button>
+                </div>
+                <table class="assoc-table">
+                    <thead><tr><th>Login</th><th>Leaving At</th><th>Logged At</th><th>Remove</th></tr></thead>
+                    <tbody>${attrList.length>0?attrList.map((a,i)=>`<tr><td style="color:#ffffff;">${a.login}</td><td style="color:#ff9500;font-weight:600;">${a.departing||'--'}</td><td style="color:#98989d;">${a.time}</td><td><button onclick="removeAttrition(${i})" style="background:#3a3a3c;color:#ff453a;border:1px solid #48484a;border-radius:4px;padding:2px 8px;font-size:0.65rem;cursor:pointer;">X</button></td></tr>`).join(''):'<tr><td colspan="4" style="color:#636366;text-align:center;padding:20px;">No attrition logged this shift</td></tr>'}</tbody>
+                </table>
+            </div>`;
+        } else if(selectedPath==='xtrain'){
+            // X-Train Lookup view
+            const ctMap=data.cross_training_by_employee_id||{};
+            const ct=data.cross_training||{};
+            const allAssocs=ct.associates||{};
+            html=`<div style="background:rgba(44,44,46,0.95);border:1px solid #38383a;border-radius:12px;padding:20px;">
+                <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
+                    <h3 style="color:#fff;font-size:1rem;">Cross-Training Lookup</h3>
+                    <input type="text" id="xtrainSearch" placeholder="Search login or name..." oninput="filterXtrain()" style="flex:1;max-width:300px;background:#1c1c1e;border:1px solid #38383a;color:#e0e0e0;padding:8px 12px;border-radius:5px;font-size:0.8rem;">
+                </div>
+                <div style="display:flex;gap:10px;margin-bottom:12px;font-size:0.7rem;color:#94a3b8;flex-wrap:wrap;">
+                    <span><span class="ct-d pick" style="vertical-align:middle;"></span> Pick</span>
+                    <span><span class="ct-d stow" style="vertical-align:middle;"></span> Stow</span>
+                    <span><span class="ct-d receive" style="vertical-align:middle;"></span> Receive</span>
+                    <span><span class="ct-d pack" style="vertical-align:middle;"></span> Pack</span>
+                    <span><span class="ct-d ship-dock" style="vertical-align:middle;"></span> Ship Dock</span>
+                    <span><span class="ct-d ib-dock" style="vertical-align:middle;"></span> IB Dock</span>
+                    <span><span class="ct-d icqa" style="vertical-align:middle;"></span> ICQA</span>
+                    <span><span class="ct-d vrets" style="vertical-align:middle;"></span> VRets</span>
+                </div>
+                <table class="assoc-table" id="xtrainTable">
+                    <thead><tr><th>Login</th><th>Employee ID</th><th>Verified Permissions</th></tr></thead>
+                    <tbody id="xtrainBody">`;
+            // Show all associates with permissions
+            const entries=Object.entries(ctMap).sort((a,b)=>b[1].length-a[1].length);
+            for(const [eid,perms] of entries){
+                const dots=perms.map(d=>`<span class="ct-d ${DC[d]||''}" title="${d}"></span>`).join(' ');
+                // Find login for this employee ID
+                let login='';
+                const abp=data.associates_by_path||{};
+                for(const assocs of Object.values(abp)){
+                    const found=assocs.find(a=>a.employee_id===eid);
+                    if(found&&found.login){login=found.login;break;}
+                }
+                html+=`<tr class="xtrain-row" data-search="${login.toLowerCase()} ${eid}"><td style="color:#e0e0e0;">${login||eid}</td><td style="color:#636366;">${eid}</td><td><span class="ct-dots">${dots}</span> <span style="color:#636366;font-size:0.65rem;">${perms.join(', ')}</span></td></tr>`;
+            }
+            html+=`</tbody></table></div>`;
+        } else {
+        const showPaths = selectedPath ? pathList.filter(p=>p.name===selectedPath) : pathList;
+        for(const p of showPaths){
+            const isOpen = selectedPath === p.name || openPaths.has(p.name);
+            const fillPct=p.expected>0?Math.min((p.rate/p.expected)*100,150):0;
+            const markerPos=p.expected>0?Math.min((100/(fillPct/100)),100):100;
+            const pctTarget=p.expected>0?Math.round((p.rate/p.expected)*100):0;
+            const assocs=p.assocs.sort((a,b)=>(b.rate||0)-(a.rate||0));
+
+            html+=`<div class="path-card ${p.hitting?'hitting':'missing'}" ${selectedPath?'onclick="togglePath(event,\''+p.name+'\')" style="cursor:pointer;"':'style="cursor:default;"'}>
+                <div class="path-top">
+                    <span class="path-name">${p.name}</span>
+                    <span class="path-badge ${p.hitting?'hit':'miss'}">${p.hitting?'HITTING':'MISSING'} ${p.gap>=0?'+':''}${p.gap.toFixed(1)}</span>
+                </div>
+                <div class="path-metrics">
+                    <div class="pm"><div class="pm-val ${p.hitting?'green':'red'}">${p.rate.toFixed(1)}</div><div class="pm-lbl">Current UPH</div></div>
+                    <div class="pm"><div class="pm-val"><input type="number" class="goal-input" value="${p.expected}" data-path="${p.name}" onclick="event.stopPropagation()" onchange="updateGoal(this)" style="width:42px;background:#1c1c1e;border:1px solid #38383a;color:#fff;text-align:center;border-radius:3px;font-size:1.05rem;font-weight:700;padding:1px 2px;"></div><div class="pm-lbl">Goal UPH</div></div>
+                    <div class="pm"><div class="pm-val blue">${(aw[p.name]||[]).length||p.assocs.filter(a=>(a.paid_hours||0)>=0.05).length}</div><div class="pm-lbl">HC</div></div>
+                    <div class="pm"><div class="pm-val">${p.units}</div><div class="pm-lbl">Units</div></div>
+                    <div class="pm"><div class="pm-val">${p.hours.toFixed(2)}</div><div class="pm-lbl">Hours</div></div>
+                </div>
+                <div class="progress-wrap">
+                    <div class="progress-bar">
+                        <div class="progress-fill ${p.hitting?'hit':'miss'}" style="width:${Math.min(fillPct,100)}%"></div>
+                        <div class="progress-marker" style="left:${markerPos}%"></div>
+                    </div>
+                </div>
+                <div class="path-footer">
+                    <span>Rate vs Goal <span class="val ${p.gap>=0?'pos':'neg'}">${p.gap>=0?'+':''}${p.gap.toFixed(1)} UPH</span></span>
+                    <span>% of Goal <span class="val">${pctTarget}%</span></span>
+                </div>
+                <div class="path-expand ${isOpen?'open':''}" id="expand-${p.name.replace(/\s+/g,'-')}">
+                    <table class="assoc-table">
+                        <thead><tr><th>Name</th><th>Login</th><th>Rate</th><th>Units</th><th>Hrs</th><th>X-Train</th><th>Move?</th></tr></thead>
+                        <tbody>${(()=>{
+                            const filtered=assocs.filter(a=>(a.paid_hours||0)>=0.05);
+                            const aw=data.active_workforce||{};
+                            const activeLogins=aw[p.name]||[];
+                            const hasWF=activeLogins.length>0;
+                            const active=hasWF?filtered.filter(a=>{const l=a.login||'';return l&&activeLogins.includes(l);}):filtered;
+                            const inactive=hasWF?filtered.filter(a=>{const l=a.login||'';return !l||!activeLogins.includes(l);}):[];
+                            let rows='';
+                            if(hasWF&&active.length>0) rows+=`<tr><td colspan="7" style="padding:10px 8px 6px;font-size:0.7rem;font-weight:700;color:#4ade80;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #38383a;background:#1c1c1e;">CURRENTLY PICKING (${active.length})</td></tr>`;
+                            rows+=active.map(a=>renderRow(a,p,false)).join('');
+                            if(hasWF&&inactive.length>0) rows+=`<tr><td colspan="7" style="padding:14px 8px 6px;font-size:0.7rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #38383a;background:#1c1c1e;">PRIOR / INACTIVE (${inactive.length})</td></tr>`;
+                            rows+=inactive.map(a=>renderRow(a,p,true)).join('');
+                            return rows;
+                        })()}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        }
+        } // end else (not xtrain)
+        document.getElementById('pathGrid').innerHTML=html;
+        document.getElementById('pathGrid').style.gridTemplateColumns = (selectedPath && selectedPath!=='xtrain') ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))';
+
+    }
+
+    function togglePath(ev, name) {
+        if(ev.target.closest('.path-expand')) return; // don't toggle when clicking inside table
+        if(openPaths.has(name)) openPaths.delete(name); else openPaths.add(name);
+        const el=document.getElementById('expand-'+name.replace(/\s+/g,'-'));
+        if(el) el.classList.toggle('open');
+    }
+
+    function selectPath(name) { selectedPath = name; render(); }
+
+    // Attrition tracking (stored in localStorage per shift date)
+    function getAttritionKey(){ return 'pickmatrix_attrition_'+new Date().toISOString().slice(0,10); }
+    function getAttrition(){ return JSON.parse(localStorage.getItem(getAttritionKey())||'[]'); }
+    function addAttrition(){
+        const input=document.getElementById('attritionInput');
+        const timeInput=document.getElementById('attritionTime');
+        const login=(input?input.value:'').trim();
+        if(!login) return;
+        const departing=timeInput?timeInput.value:'';
+        const list=getAttrition();
+        if(list.find(a=>a.login===login)) return;
+        list.push({login:login, departing:departing||'?', time:new Date().toLocaleTimeString()});
+        localStorage.setItem(getAttritionKey(),JSON.stringify(list));
+        if(input) input.value='';
+        render();
+    }
+    function removeAttrition(idx){
+        const list=getAttrition();
+        list.splice(idx,1);
+        localStorage.setItem(getAttritionKey(),JSON.stringify(list));
+        render();
+    }
+
+    function showAttrSuggestions(){
+        const input=document.getElementById('attritionInput');
+        const box=document.getElementById('attrSuggestions');
+        if(!input||!box) return;
+        const q=input.value.toLowerCase().trim();
+        if(q.length<2){box.style.display='none';return;}
+        // Get all logins from active workforce and associates
+        const allLogins=new Set();
+        const abp=data.associates_by_path||{};
+        for(const assocs of Object.values(abp)){
+            for(const a of assocs){ if(a.login) allLogins.add(a.login); }
+        }
+        const aw=data.active_workforce||{};
+        for(const logins of Object.values(aw)){ for(const l of logins) allLogins.add(l); }
+        // Filter matches
+        const matches=[...allLogins].filter(l=>l.toLowerCase().includes(q)).slice(0,8);
+        if(matches.length===0){box.style.display='none';return;}
+        box.style.display='block';
+        box.innerHTML=matches.map(m=>`<div onclick="selectAttrSuggestion('${m}')" style="padding:6px 12px;cursor:pointer;font-size:0.78rem;color:#e5e5ea;border-bottom:1px solid #38383a;" onmouseover="this.style.background='#3a3a3c'" onmouseout="this.style.background=''">${m}</div>`).join('');
+    }
+
+    function selectAttrSuggestion(login){
+        document.getElementById('attritionInput').value=login;
+        document.getElementById('attrSuggestions').style.display='none';
+    }
+
+    function filterXtrain() {
+        const q = (document.getElementById('xtrainSearch')||{}).value||'';
+        const term = q.toLowerCase();
+        const rows = document.querySelectorAll('.xtrain-row');
+        rows.forEach(r => { r.style.display = r.dataset.search.includes(term) ? '' : 'none'; });
+    }
+
+    function renderRow(a, p, isInactive) {
+        const tol=data.tolerance||0.05;
+        const ctMap=data.cross_training_by_employee_id||{};
+        const pfc=pf(a.rate||0,p.expected,tol);
+        const ct=ctMap[a.employee_id]||[];
+        const dots=ct.map(d=>`<span class="ct-d ${DC[d]||''}" title="${d}"></span>`).join('');
+        const login=a.login||a.employee_id||'';
+        const histInfo=data.history_summary&&data.history_summary[a.employee_id]?data.history_summary[a.employee_id]:null;
+        const histDays=histInfo?histInfo.days_active:0;
+        // Tooltip
+        let tipContent='';
+        if(histInfo&&histInfo.path_rates&&Object.keys(histInfo.path_rates).length>0){
+            const pathRates=histInfo.path_rates;
+            const allExp=data.rate_expectations||{};
+            const defE=data.default_rate_expectation||5;
+            let goodPaths=[],badPaths=[];
+            for(const [pw,stats] of Object.entries(pathRates)){
+                if(pw===p.name) continue;
+                const goal=getGoal(pw,allExp[pw]||defE);
+                if(stats.avg_rate>=goal) goodPaths.push({path:pw,rate:stats.avg_rate,goal});
+                else badPaths.push({path:pw,rate:stats.avg_rate,goal});
+            }
+            if(goodPaths.length>0){tipContent+=`<div class="tip-title">STRENGTHS:</div>`;for(const g of goodPaths)tipContent+=`<div class="tip-yes">&#10003; ${g.path}: ${g.rate} avg (goal ${g.goal})</div>`;}
+            if(badPaths.length>0){tipContent+=`<div class="tip-title" style="margin-top:4px;">OPPORTUNITIES:</div>`;for(const b of badPaths)tipContent+=`<div class="tip-no">&#10007; ${b.path}: ${b.rate} avg (goal ${b.goal})</div>`;}
+            if(!goodPaths.length&&!badPaths.length) tipContent=`<div style="color:#94a3b8;">Only worked ${p.name}</div>`;
+        } else { tipContent=`<div style="color:#64748b;">No historical data yet</div>`; }
+        const rowClass=isInactive?`${pfc} inactive`:pfc;
+        return `<tr class="${rowClass}"><td class="has-tip">${a.name||''}<div class="tip-box">${tipContent}</div></td><td class="has-tip" style="color:#94a3b8;">${login}<div class="tip-box">${tipContent}</div></td><td><span class="rate-pill ${pfc}">${(a.rate||0).toFixed(1)}</span></td><td>${a.units||0}</td><td>${(a.paid_hours||0).toFixed(1)}</td><td><span class="ct-dots">${dots||'--'}</span></td><td><button onclick="event.stopPropagation();showRecommend('${a.employee_id}','${p.name}','${a.name||login}')" style="background:#3a3a3c;color:#e0e0e0;border:1px solid #38383a;border-radius:3px;padding:2px 6px;font-size:0.65rem;cursor:pointer;">${histDays?histDays+'d':'?'}</button></td></tr>`;
+    }
+
+    // Cross-training
+    // Recommend Move
+    async function showRecommend(employeeId, fromPath, name) {
+        const modal = document.getElementById('recModal');
+        modal.style.display = 'flex';
+        document.getElementById('recTitle').textContent = `Move Recommendation: ${name}`;
+        document.getElementById('recContent').innerHTML = '<div class="spinner" style="margin:20px auto;"></div>';
+        
+        // First get their history
+        try {
+            const hRes = await fetch(`${API}/api/history?employee_id=${employeeId}`);
+            const hData = await hRes.json();
+            
+            let html = '';
+            
+            // Show path averages
+            const avgs = hData.path_averages || {};
+            if (Object.keys(avgs).length > 0) {
+                html += `<div style="margin-bottom:14px;"><strong style="color:#fff;">14-Day History (${Object.keys(avgs).length} paths worked):</strong></div>`;
+                html += '<table style="width:100%;border-collapse:collapse;font-size:0.75rem;margin-bottom:14px;">';
+                html += '<tr style="border-bottom:1px solid #38383a;"><th style="text-align:left;padding:4px 8px;color:#64748b;">Path</th><th style="text-align:right;padding:4px 8px;color:#64748b;">Avg Rate</th><th style="text-align:right;padding:4px 8px;color:#64748b;">Shifts</th><th style="text-align:right;padding:4px 8px;color:#64748b;">Range</th></tr>';
+                for (const [path, stats] of Object.entries(avgs)) {
+                    html += `<tr style="border-bottom:1px solid #2c2c2e;"><td style="padding:4px 8px;">${path}</td><td style="text-align:right;padding:4px 8px;font-weight:600;color:#4ade80;">${stats.avg_rate}</td><td style="text-align:right;padding:4px 8px;">${stats.total_shifts}</td><td style="text-align:right;padding:4px 8px;color:#94a3b8;">${stats.min_rate} - ${stats.max_rate}</td></tr>`;
+                }
+                html += '</table>';
+            } else {
+                html += '<p style="color:#94a3b8;margin-bottom:14px;">No historical data yet. Data collects automatically each shift.</p>';
+            }
+            
+            // Show move recommendation form
+            const paths = Object.keys(data.paths || {}).filter(p => p !== fromPath);
+            html += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #38383a;">`;
+            html += `<strong style="color:#fff;">Simulate Move from ${fromPath}:</strong>`;
+            html += `<div style="display:flex;gap:8px;margin-top:8px;align-items:center;">`;
+            html += `<select id="recDestPath" style="background:#1c1c1e;border:1px solid #38383a;color:#e0e0e0;padding:4px 8px;border-radius:4px;font-size:0.75rem;">`;
+            for (const p of paths) {
+                html += `<option value="${p}">${p}</option>`;
+            }
+            html += `</select>`;
+            html += `<span style="color:#64748b;font-size:0.7rem;">Goal:</span>`;
+            html += `<input type="number" id="recGoal" value="${getGoal(paths[0],5)}" style="width:50px;background:#1c1c1e;border:1px solid #38383a;color:#fff;padding:3px 6px;border-radius:3px;font-size:0.75rem;text-align:center;">`;
+            html += `<button onclick="runRecommend('${employeeId}','${fromPath}')" style="background:#2563eb;color:#fff;border:none;padding:4px 12px;border-radius:4px;font-size:0.75rem;cursor:pointer;">Analyze</button>`;
+            html += `</div>`;
+            html += `<div id="recResult" style="margin-top:10px;"></div>`;
+            html += `</div>`;
+            
+            document.getElementById('recContent').innerHTML = html;
+            
+            // Update goal when dest path changes
+            const destSelect = document.getElementById('recDestPath');
+            if (destSelect) {
+                destSelect.onchange = () => {
+                    document.getElementById('recGoal').value = getGoal(destSelect.value, 5);
+                };
+            }
+        } catch(e) {
+            document.getElementById('recContent').innerHTML = '<p style="color:#f87171;">Error loading history.</p>';
+        }
+    }
+    
+    async function runRecommend(employeeId, fromPath) {
+        const toPath = document.getElementById('recDestPath').value;
+        const goal = parseFloat(document.getElementById('recGoal').value) || 5;
+        document.getElementById('recResult').innerHTML = '<div class="spinner" style="margin:10px auto;width:20px;height:20px;"></div>';
+        
+        try {
+            const r = await fetch(`${API}/api/recommend-move`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({employee_id: employeeId, from_path: fromPath, to_path: toPath, goal_uph: goal})
+            });
+            const res = await r.json();
+            const rec = res.recommendation;
+            
+            let color = rec.verdict === 'GOOD MOVE' ? '#4ade80' : rec.verdict === 'OKAY MOVE' ? '#fbbf24' : rec.verdict === 'RISKY MOVE' ? '#f87171' : '#94a3b8';
+            let html = `<div style="margin-top:8px;padding:10px;background:#1c1c1e;border-radius:6px;border:1px solid #38383a;">`;
+            html += `<div style="font-size:1rem;font-weight:700;color:${color};margin-bottom:6px;">${rec.verdict}</div>`;
+            html += `<div style="font-size:0.7rem;color:#64748b;margin-bottom:6px;">Confidence: ${rec.confidence}</div>`;
+            for (const reason of rec.reasoning || []) {
+                html += `<div style="font-size:0.75rem;color:#e0e0e0;margin-bottom:3px;">• ${reason}</div>`;
+            }
+            if (rec.dest_avg_rate) html += `<div style="margin-top:6px;font-size:0.75rem;color:#94a3b8;">Dest avg: ${rec.dest_avg_rate} UPH over ${rec.dest_shifts_worked} shifts</div>`;
+            if (rec.path_pair_insight) html += `<div style="margin-top:4px;font-size:0.7rem;color:#64748b;">Path pair: ${rec.path_pair_insight.success_rate}% success rate (${rec.path_pair_insight.total_moves} moves tracked)</div>`;
+            if (rec.learning_stats && rec.learning_stats.total_moves_logged > 0) html += `<div style="margin-top:4px;font-size:0.65rem;color:#475569;">System learning: ${rec.learning_stats.total_moves_logged} moves logged, ${rec.learning_stats.overall_success_rate}% overall success</div>`;
+            html += `<div style="margin-top:10px;"><button onclick="confirmMove('${employeeId}','${fromPath}','${toPath}',${goal})" style="background:#16a34a;color:#fff;border:none;padding:5px 14px;border-radius:4px;font-size:0.75rem;cursor:pointer;font-weight:500;">Confirm Move</button><span id="confirmMsg" style="margin-left:8px;font-size:0.7rem;color:#64748b;"></span></div>`;
+            html += `</div>`;
+            
+            document.getElementById('recResult').innerHTML = html;
+        } catch(e) {
+            document.getElementById('recResult').innerHTML = '<p style="color:#f87171;">Error getting recommendation.</p>';
+        }
+    }
+    
+    function closeRec() { document.getElementById('recModal').style.display = 'none'; }
+
+    async function confirmMove(employeeId, fromPath, toPath, goal) {
+        try {
+            const r = await fetch(`${API}/api/recommend-move`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({employee_id: employeeId, from_path: fromPath, to_path: toPath, goal_uph: goal, log_decision: true})
+            });
+            const res = await r.json();
+            if (res.success) {
+                document.getElementById('confirmMsg').textContent = 'Move logged! System will track outcome.';
+                document.getElementById('confirmMsg').style.color = '#4ade80';
+            }
+        } catch(e) {
+            document.getElementById('confirmMsg').textContent = 'Error logging move.';
+            document.getElementById('confirmMsg').style.color = '#f87171';
+        }
+    }
+
+    // Auto-refresh
+    function setupAutoRefresh(){if(refreshTimer)clearInterval(refreshTimer);if(countdownTimer)clearInterval(countdownTimer);if(refreshMin<=0){document.getElementById('countdown').textContent='(off)';return;}const ms=refreshMin*60000;nextRefresh=Date.now()+ms;refreshTimer=setInterval(async()=>{setStatus('fetching','Auto-refreshing...');if(await fetchData()){render();setStatus('ok','Refreshed '+time());}else setStatus('error','Failed');nextRefresh=Date.now()+ms;},ms);countdownTimer=setInterval(()=>{if(!nextRefresh)return;const rem=Math.max(0,nextRefresh-Date.now()),m=Math.floor(rem/60000),s=Math.floor((rem%60000)/1000);document.getElementById('countdown').textContent=`(${m}:${s.toString().padStart(2,'0')})`;},1000);}
+    function resetCountdown(){if(refreshMin>0)nextRefresh=Date.now()+refreshMin*60000;}
+
+    // Fast HC polling - updates active/inactive headcount every 30 seconds
+    function startHCPoller(){
+        setInterval(async()=>{
+            try{
+                const r=await fetch(API+'/api/data');
+                if(r.ok){
+                    const fresh=await r.json();
+                    if(fresh.active_workforce){
+                        data.active_workforce=fresh.active_workforce;
+                        // Update just the summary chips and path tabs without full re-render
+                        const aw=data.active_workforce||{};
+                        const totalActiveHC=Object.values(aw).reduce((s,v)=>s+v.length,0);
+                        // Re-render to update HC numbers
+                        if(data.paths) render();
+                    }
+                }
+            }catch(e){}
+        },30000);
+    }
+
+    function setStatus(s,t){document.getElementById('statusDot').className='status-dot'+(s==='fetching'?' fetching':s==='error'?' error':s==='off'?' off':'');document.getElementById('statusText').textContent=t;}
+    function showLoading(v){document.getElementById('loading').classList.toggle('hidden',!v);}
+    function fmt(d){return d.getFullYear()+'-'+(d.getMonth()+1+'').padStart(2,'0')+'-'+(d.getDate()+'').padStart(2,'0')+'T'+(d.getHours()+'').padStart(2,'0')+':'+(d.getMinutes()+'').padStart(2,'0');}
+    function time(){return new Date().toLocaleTimeString();}
+
+    document.addEventListener('DOMContentLoaded',async()=>{
+        // Auto-detect shift based on current time or restore saved preference
+        const savedShift = localStorage.getItem('staffing_shift');
+        const hour = new Date().getHours();
+        const autoShift = (hour >= 18 || hour < 5) ? 'night' : (hour >= 7 && hour < 18) ? 'day' : 'night';
+        document.getElementById('shiftSelect').value = savedShift || autoShift;
+        
+        // Set time range to shift window and tell server
+        const w = getShiftWindow();
+        document.getElementById('startTime').value = fmt(w.start);
+        document.getElementById('endTime').value = fmt(w.end);
+        
+        showLoading(true);
+        try {
+            // Tell server the shift and time range, then fetch
+            await fetch(API+'/api/set-shift',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({shift:savedShift||autoShift})}).catch(()=>{});
+            await new Promise(r=>setTimeout(r,500));
+            if(await fetchData()){render();setStatus('ok','Loaded '+time());if(data.refresh_interval_minutes){refreshMin=data.refresh_interval_minutes;document.getElementById('refreshInterval').value=refreshMin;}}
+            else{setStatus('error','Failed to connect');document.getElementById('pathGrid').innerHTML='<div style="text-align:center;padding:60px;color:#64748b;grid-column:1/-1;"><h2 style="color:#94a3b8;">No Data</h2><p>Run: python staffing_dashboard_server.py</p></div>';}
+        } catch(err) {
+            console.error('Render error:', err);
+            setStatus('error','JS Error: '+err.message);
+            document.getElementById('pathGrid').innerHTML='<div style="text-align:center;padding:40px;color:#f87171;grid-column:1/-1;"><h2>Render Error</h2><p>'+err.message+'</p><p style="margin-top:8px;color:#94a3b8;">Check browser console (F12) for details</p></div>';
+        }
+        showLoading(false);setupAutoRefresh();startHCPoller();
+    });
+    </script>
+<div style="text-align:center;padding:12px;font-size:0.6rem;color:#636366;border-top:1px solid #38383a;margin-top:20px;">PickMatrix v1.0 | Created &amp; managed by ttuyen | HOU8 Pick Operations</div></body>
+</html>

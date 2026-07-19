@@ -1,0 +1,66 @@
+# ============================================================
+# FCLM Rate Puller - Configuration
+# ============================================================
+
+# Warehouse / Process Settings
+warehouse_id: "HOU8"
+process_id: "1003001"
+
+# Attribute configuration (typically don't need to change these)
+primary_attribute: "PICK_PATH_TYPE"
+secondary_attribute: "PICKING_PROCESS_PATH"
+node_type: "FC"
+
+# Schedule offset: minutes after the 15-min boundary to wait before pulling.
+# Set to 10 to give the site time to finalize data.
+# e.g., data for 10:00-10:15 will be pulled at 10:25
+schedule_offset_minutes: 10
+
+# ============================================================
+# Slack Webhook
+# ============================================================
+# Create a webhook at: https://api.slack.com/messaging/webhooks
+slack_webhook_url: "https://hooks.slack.com/triggers/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"
+
+# ============================================================
+# Cookie Settings
+# ============================================================
+# method options:
+#   "firefox_auto" (recommended) - Reads cookies from Firefox. No encryption, no extra deps.
+#   "chrome_auto"  - Reads cookies from Chrome (requires pywin32 + pycryptodome).
+#   "manual"       - Uses the midway_cookies list below.
+#
+# Just authenticate at https://fclm-portal.amazon.com in your browser and the tool
+# will extract your session cookies automatically each cycle.
+cookie_settings:
+  method: "firefox_auto"
+  domain: "amazon.com"
+  # firefox_profile_path: null  # Auto-detected; override if needed
+  # chrome_profile: "Default"   # For chrome_auto method
+  # chrome_path: null            # For chrome_auto method
+
+# ============================================================
+# Manual Cookies (fallback if auto-extraction doesn't work)
+# ============================================================
+# midway_cookies:
+#   - "session-id=YOUR_SESSION_ID_HERE"
+#   - "at-main=YOUR_AT_MAIN_HERE"
+#   - "sess-at-main=YOUR_SESS_AT_MAIN_HERE"
+
+# ============================================================
+# End-of-Shift Report (functionRollup)
+# ============================================================
+# Pulls rate + hours staffed for all process paths at the end of shift.
+# Fires once daily at the configured trigger time.
+end_of_shift:
+  enabled: true
+  # Time to fire the report (24-hour format)
+  trigger_hour: 4
+  trigger_minute: 55
+  # Process ID for the functionRollup report
+  process_id: "1003001"
+  # Shift window (overnight: start previous day, end next day)
+  shift_start_hour: 18
+  shift_start_minute: 0
+  shift_end_hour: 6
+  shift_end_minute: 0

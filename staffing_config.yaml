@@ -1,0 +1,66 @@
+# ============================================================
+# Staffing Evaluator Configuration
+# ============================================================
+# This file configures the Staffing Evaluator tool.
+# The tool uses your existing config.yaml for authentication
+# (cookies, warehouse ID). This file adds the evaluator-specific settings.
+
+# ============================================================
+# Process Paths (Function IDs from FCLM)
+# ============================================================
+# These are all the Pick process paths at HOU8.
+# The tool uses the functionRollup endpoint (processId=1003001)
+# which returns all paths in a single call.
+# Individual function IDs are listed for reference.
+process_paths:
+  "RF Pick Singles": "4300002523"
+  "OrderPickLowDensityP": "4300016816"
+  "OrderPickVNA": "4300020902"
+  "Orderpicker Pick": "4300006870"
+  "OrderPick SIOC": "4300016815"
+  "MultiRelayPick": "4300016817"
+  "RF Pick": "4300000184"
+  "Giftwrap Picking": "4300000707"
+
+# ============================================================
+# Rate Expectations (UPH - Units Per Hour)
+# ============================================================
+# The target rate each process path should hit.
+# Associates are color-coded in the dashboard:
+#   Green  = at or above expected rate
+#   Yellow = within tolerance% below expected rate
+#   Red    = more than tolerance% below expected rate
+rate_expectations:
+  "RF Pick Singles": 50
+  "OrderPickLowDensityP": 20
+  "OrderPickVNA": 35
+  "Orderpicker Pick": 30
+  "OrderPick SIOC": 20
+  "MultiRelayPick": 20
+  "RF Pick": 5
+  "Giftwrap Picking": 5
+
+# Default rate for any path not explicitly listed above
+default_rate_expectation: 5
+
+# ============================================================
+# Dashboard Settings
+# ============================================================
+dashboard:
+  # Auto-refresh interval in minutes (15 or 30)
+  refresh_interval_minutes: 15
+  # Port for the local dashboard server
+  port: 8787
+
+# ============================================================
+# Shift Window
+# ============================================================
+# The tool pulls rates from shift start to current time by default.
+# You can override this with the date/time selector in the dashboard.
+staffing_evaluator:
+  shift_start_hour: 18    # 6:00 PM (shift start)
+  shift_start_minute: 0
+  # Tolerance for "at expectation" classification (dashboard color coding)
+  # 0.05 = within 5% of target counts as "at expectation" (yellow)
+  # Above target = green, more than 5% below = red
+  tolerance: 0.05
