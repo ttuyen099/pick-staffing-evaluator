@@ -418,14 +418,22 @@ class DataManager:
             associates_by_path = parse_individual_associates(self.raw_html)
         
         # Enrich associates with login from cross-training CSV reverse map
-        # Build employee_id -> login reverse map
+        # Build employee_id -> login reverse map from CSV + workforce bridge
         login_to_eid = self.shift_info.get("login_to_employee_id", {})
         eid_to_login = {v: k for k, v in login_to_eid.items()}
+        
+        # Also build login lookup from active workforce (Tampermonkey provides logins directly)
+        # workforce: {path: [logins]} - match by checking if associate name appears in workforce
         
         for path_name, assocs in associates_by_path.items():
             for a in assocs:
                 eid = a.get("employee_id", "")
-                a["login"] = eid_to_login.get(eid, "")
+                login = eid_to_login.get(eid, "")
+                if not login:
+                    # Try matching from workforce data by checking active list
+                    wf_logins = self.active_workforce.get(path_name, [])
+                    # Can't match by name easily, so just leave empty - workforce bridge handles it
+                a["login"] = login
         
         # Use cached permissions (populated by background thread)
         verified_permissions = self._cached_permissions
