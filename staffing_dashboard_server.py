@@ -987,6 +987,17 @@ def main():
         print("  Initial fetch failed - dashboard will retry on next interval.")
         print("  (Make sure your Midway session is active in Firefox)")
     
+    # Backfill historical data in background (catches up on missed days)
+    def run_backfill():
+        from rate_history import backfill_history
+        try:
+            backfill_history(config, days=14)
+        except Exception as e:
+            logger.warning("Backfill error: %s", e)
+    
+    threading.Thread(target=run_backfill, daemon=True).start()
+    print("  Historical backfill running in background...")
+    
     # Start poller
     poller = Poller(data_manager, refresh_interval)
     poller.start()

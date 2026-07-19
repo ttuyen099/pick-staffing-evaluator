@@ -345,6 +345,108 @@ def get_all_history_summary(days=14):
     return result
 
 
+def backfill_history(config, days=14):
+    """
+    Backfill historical data for missing dates.
+    
+    Queries FCLM for each missing date (6:00 AM to 6:00 PM window to capture
+    ALL associates regardless of shift) and stores their rates.
+    
+    Only runs for dates not already in the database.
+    """
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from fclm_rate_puller import fetch_fclm_data, parse_rate_data
+    from staffing_dashboard_server import parse_individual_associates
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Find which dates we already have
+    cursor.execute("SELECT DISTINCT date FROM rate_history ORDER BY date")
+    existing_dates = set(r[0] for r in cursor.fetchall())
+    conn.close()
+    
+    # Generate list of dates to backfill (last N days)
+    today = datetime.now().date()
+    dates_to_check = []
+    for i in range(1, days + 1):
+        d = today - timedelta(days=i)
+        date_str = d.strftime("%Y-%m-%d")
+        if date_str not in existing_dates:
+            dates_to_check.append(d)
+    
+    if not dates_to_check:
+        logger.info("Backfill: No missing dates in last %d days", days)
+        return
+    
+    logger.info("Backfill: %d missing dates to fill", len(dates_to_check))
+    
+    for d in dates_to_check:
+        # Query full 24 hours: 6:00 AM today to 6:00 AM next day
+        # This captures ALL associates from both Day shift (7:30AM-6PM) and Night shift (6:30PM-5AM)
+        start_str = d.strftime("%Y/%m/%d")
+        next_day = (d + timedelta(days=1)).strftime("%Y/%m/%d")
+        
+        url = (
+            f"https://fclm-portal.amazon.com/reports/functionRollup?reportFormat=HTML"
+            f"&warehouseId={config['warehouse_id']}"
+            f"&processId={config['process_id']}"
+            f"&maxIntradayDays=1"
+            f"&spanType=Intraday"
+            f"&startDateIntraday={start_str}"
+            f"&startHourIntraday=6"
+            f"&startMinuteIntraday=0"
+            f"&endDateIntraday={next_day}"
+            f"&endHourIntraday=6"
+            f"&endMinuteIntraday=0"
+        )
+        
+        logger.info("  Backfilling %s...", d.strftime("%Y-%m-%d"))
+        
+        html = fetch_fclm_data(url, config)
+        if not html:
+            logger.warning("  Failed to fetch %s", d.strftime("%Y-%m-%d"))
+            continue
+        
+        # Parse individual associates
+        associates_by_path = parse_individual_associates(html)
+        if not associates_by_path:
+            logger.warning("  No associate data for %s", d.strftime("%Y-%m-%d"))
+            continue
+        
+        # Record the data
+        date_str = d.strftime("%Y-%m-%d")
+        conn = get_db()
+        cursor = conn.cursor()
+        recorded = 0
+        
+        for path_name, associates in associates_by_path.items():
+            for a in associates:
+                hours = a.get("paid_hours", 0) or 0
+                rate = a.get("rate", 0) or 0
+                units = a.get("units", 0) or 0
+                employee_id = a.get("employee_id", "")
+                
+                if hours <= 0 or rate <= 0 or not employee_id:
+                    continue
+                
+                login = a.get("login", "")
+                name = a.get("name", "")
+                
+                cursor.execute("""
+                    INSERT OR IGNORE INTO rate_history (date, shift, employee_id, login, name, process_path, rate, units, hours, recorded_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (date_str, "Backfill", employee_id, login, name, path_name, rate, int(units), hours, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                recorded += cursor.rowcount
+        
+        conn.commit()
+        conn.close()
+        logger.info("  %s: recorded %d entries", date_str, recorded)
+    
+    logger.info("Backfill complete")
+
+
 if __name__ == "__main__":
     """Run standalone to inspect the database."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
