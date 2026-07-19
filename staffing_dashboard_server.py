@@ -562,6 +562,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._serve_file(path.lstrip("/"), "text/css")
         elif path.endswith(".js"):
             self._serve_file(path.lstrip("/"), "application/javascript")
+        elif path.endswith(".txt"):
+            self._serve_file(path.lstrip("/"), "text/plain")
         else:
             self.send_error(404)
     
