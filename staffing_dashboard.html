@@ -436,10 +436,14 @@
                 const dots=perms.map(d=>`<span class="ct-d ${DC[d]||''}" title="${d}"></span>`).join(' ');
                 // Find login for this employee ID
                 let login='';
-                const abp=data.associates_by_path||{};
-                for(const assocs of Object.values(abp)){
-                    const found=assocs.find(a=>a.employee_id===eid);
-                    if(found&&found.login){login=found.login;break;}
+                const eidMap=data.eid_to_login||{};
+                if(eidMap[eid]){login=eidMap[eid];}
+                else{
+                    const abp=data.associates_by_path||{};
+                    for(const assocs of Object.values(abp)){
+                        const found=assocs.find(a=>a.employee_id===eid);
+                        if(found&&found.login){login=found.login;break;}
+                    }
                 }
                 html+=`<tr class="xtrain-row" data-search="${login.toLowerCase()} ${eid}"><td style="color:#e0e0e0;">${login||eid}</td><td style="color:#636366;">${eid}</td><td><span class="ct-dots">${dots}</span> <span style="color:#636366;font-size:0.65rem;">${perms.join(', ')}</span></td></tr>`;
             }

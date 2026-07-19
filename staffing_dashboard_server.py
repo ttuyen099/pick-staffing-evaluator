@@ -445,6 +445,7 @@ class DataManager:
             "cross_training_by_employee_id": verified_permissions,
             "history_summary": get_all_history_summary(),
             "active_workforce": self.active_workforce,
+            "eid_to_login": {v: k for k, v in self.shift_info.get("login_to_employee_id", {}).items()},
         }
     
     def get_data(self):
