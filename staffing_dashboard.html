@@ -786,14 +786,15 @@
 <div style="text-align:center;padding:12px;font-size:0.6rem;color:#636366;border-top:1px solid #38383a;margin-top:20px;">PickMatrix <span id="footerVer">v1.8.2</span> | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>
 <script>
 // Check for updates on load
-fetch('https://raw.githubusercontent.com/ttuyen099/pick-staffing-evaluator/main/version.txt?t='+Date.now())
-.then(r=>r.text()).then(remote=>{
-    remote=remote.trim();
+fetch('https://api.github.com/repos/ttuyen099/pick-staffing-evaluator/contents/version.txt')
+.then(r=>r.json()).then(j=>{
+    const remote=atob(j.content).trim();
     fetch('/version.txt?t='+Date.now()).then(r=>r.text()).then(localVer=>{
         localVer=localVer.trim();
         const el=document.getElementById('updateStatus');
         if(remote===localVer) el.innerHTML='<span style="color:#4ade80;">&#10003; Up to date</span>';
-        else el.innerHTML='<span style="color:#ff9500;">Update v'+remote+' available </span><button onclick="runUpdate()" style="background:#ff9500;color:#fff;border:none;padding:3px 10px;border-radius:4px;font-size:0.6rem;cursor:pointer;font-weight:600;">Update Now</button>';
+        else if(remote>localVer) el.innerHTML='<span style="color:#ff9500;">Update v'+remote+' available </span><button onclick="runUpdate()" style="background:#ff9500;color:#fff;border:none;padding:3px 10px;border-radius:4px;font-size:0.6rem;cursor:pointer;font-weight:600;">Update Now</button>';
+        else el.innerHTML='<span style="color:#4ade80;">&#10003; Up to date</span>';
     });
 }).catch(()=>{document.getElementById('updateStatus').textContent='';});
 
