@@ -816,7 +816,7 @@
         showLoading(false);setupAutoRefresh();startHCPoller();
     });
     </script>
-<div style="text-align:center;padding:12px;font-size:0.6rem;color:#636366;border-top:1px solid #38383a;margin-top:20px;">PickMatrix <span id="footerVer">v1.8.2</span> | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>
+<div style="text-align:center;padding:12px;font-size:0.6rem;color:#636366;border-top:1px solid #38383a;margin-top:20px;">PickMatrix <span id="footerVer" id="footerVer"></span> | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>
 <script>
 // Check for updates on load
 fetch('https://api.github.com/repos/ttuyen099/pick-staffing-evaluator/contents/version.txt')
@@ -831,6 +831,7 @@ fetch('https://api.github.com/repos/ttuyen099/pick-staffing-evaluator/contents/v
     });
 }).catch(()=>{document.getElementById('updateStatus').textContent='';});
 
+fetch("/version.txt").then(r=>r.text()).then(v=>{var el=document.getElementById("footerVer");if(el)el.textContent="v"+v.trim();}).catch(()=>{});
 function runUpdate(){
     document.getElementById('updateStatus').innerHTML='<span style="color:#fbbf24;">Downloading update...</span>';
     fetch(API+'/api/run-update',{method:'POST'}).then(r=>r.json()).then(d=>{
