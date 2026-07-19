@@ -151,7 +151,7 @@
 
         /* Tooltip */
         .has-tip { position: relative; cursor: help; }
-        .tip-box { display: none; position: fixed; z-index: 100; background: #1e293b; border: 1px solid #007aff; border-radius: 12px; padding: 14px 18px; font-size: 0.78rem; white-space: nowrap; box-shadow: 0 8px 30px rgba(0,0,0,0.7); min-width: 240px; max-width: 340px; pointer-events: none; }
+        .tip-box { display: none; position: fixed; z-index: 100; background: #1e293b; border: 1px solid #007aff; border-radius: 12px; padding: 14px 18px; font-size: 0.78rem; white-space: nowrap; box-shadow: 0 8px 30px rgba(0,0,0,0.7); min-width: 240px; max-width: 340px; max-height: 200px; overflow-y: auto; pointer-events: none; }
         .tip-box .tip-title { color: #ffffff; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; margin-top: 6px; }
         .tip-box .tip-title:first-child { margin-top: 0; }
         .tip-box .tip-yes { color: #4ade80; padding: 2px 0; }
@@ -760,28 +760,11 @@
             const box = tip.querySelector('.tip-box');
             if (box) {
                 const rect = tip.getBoundingClientRect();
-                // Measure tooltip offscreen first
                 box.style.display = 'block';
-                box.style.left = '-9999px';
-                box.style.top = '0';
-                const boxH = box.offsetHeight;
-                const boxW = box.offsetWidth || 280;
-                // Horizontal: right of name, or left if no room
-                let left = rect.right + 12;
-                if (left + boxW > window.innerWidth - 10) left = rect.left - boxW - 12;
+                // Always position: right of the name column, vertically centered in viewport
+                let left = Math.min(rect.right + 12, window.innerWidth - 300);
                 if (left < 10) left = 10;
-                // Vertical: if row is in bottom half of screen, show tooltip ABOVE the row
-                // if row is in top half, show tooltip below/aligned with the row
-                let top;
-                if (rect.top > window.innerHeight / 2) {
-                    // Bottom half - position tooltip above the row
-                    top = rect.top - boxH - 4;
-                    if (top < 10) top = 10;
-                } else {
-                    // Top half - position tooltip aligned with row
-                    top = rect.top;
-                    if (top + boxH > window.innerHeight - 10) top = window.innerHeight - boxH - 10;
-                }
+                let top = Math.max(10, Math.min(rect.top, window.innerHeight - 220));
                 box.style.left = left + 'px';
                 box.style.top = top + 'px';
             }
