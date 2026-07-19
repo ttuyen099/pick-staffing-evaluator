@@ -761,13 +761,17 @@
             if (box) {
                 const rect = tip.getBoundingClientRect();
                 box.style.display = 'block';
-                // Position to the right of the element, vertically aligned
+                box.style.left = '-9999px';
+                box.style.top = '0';
+                const boxH = box.offsetHeight;
+                const boxW = box.offsetWidth;
+                // Position to the right of the element
                 let left = rect.right + 12;
                 let top = rect.top;
                 // If it would go off right edge, put it to the left
-                if (left + 280 > window.innerWidth) left = rect.left - 280;
+                if (left + boxW > window.innerWidth) left = rect.left - boxW - 12;
                 // If it would go off bottom, move up
-                if (top + box.offsetHeight > window.innerHeight) top = window.innerHeight - box.offsetHeight - 10;
+                if (top + boxH > window.innerHeight - 10) top = window.innerHeight - boxH - 10;
                 if (top < 10) top = 10;
                 box.style.left = left + 'px';
                 box.style.top = top + 'px';
