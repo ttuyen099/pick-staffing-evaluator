@@ -912,17 +912,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json")
             self.wfile.write(json.dumps({"success": True, "output": result.stdout}).encode())
             
-            # Schedule restart after response is sent
-            import threading
-            def restart():
-                import time
-                time.sleep(2)
-                server_path = os.path.join(script_dir, "staffing_dashboard_server.py")
-                subprocess.Popen([python_exe, server_path, "--no-browser"], cwd=script_dir)
-                os._exit(0)
-            threading.Thread(target=restart, daemon=True).start()
-            threading.Thread(target=restart, daemon=True).start()
-            
         except Exception as e:
             self._set_headers("application/json", 500)
             self.wfile.write(json.dumps({"error": str(e)}).encode())

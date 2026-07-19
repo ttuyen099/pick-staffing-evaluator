@@ -783,12 +783,12 @@
         showLoading(false);setupAutoRefresh();startHCPoller();
     });
     </script>
-<div style="text-align:center;padding:12px;font-size:0.6rem;color:#636366;border-top:1px solid #38383a;margin-top:20px;">PickMatrix v1.8.1 | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>
+<div style="text-align:center;padding:12px;font-size:0.6rem;color:#636366;border-top:1px solid #38383a;margin-top:20px;">PickMatrix v1.8.2 | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>
 <script>
 // Check for updates on load
 fetch('https://raw.githubusercontent.com/ttuyen099/pick-staffing-evaluator/main/version.txt?t='+Date.now())
 .then(r=>r.text()).then(remote=>{
-    const local='1.8.1';
+    const local='1.8.2';
     remote=remote.trim();
     const el=document.getElementById('updateStatus');
     if(remote===local) el.innerHTML='<span style="color:#4ade80;">&#10003; Up to date</span>';
@@ -796,11 +796,11 @@ fetch('https://raw.githubusercontent.com/ttuyen099/pick-staffing-evaluator/main/
 }).catch(()=>{document.getElementById('updateStatus').textContent='';});
 
 function runUpdate(){
-    document.getElementById('updateStatus').innerHTML='<span style="color:#fbbf24;">Updating...</span>';
+    document.getElementById('updateStatus').innerHTML='<span style="color:#fbbf24;">Downloading update...</span>';
     fetch(API+'/api/run-update',{method:'POST'}).then(r=>r.json()).then(d=>{
-        if(d.success) document.getElementById('updateStatus').innerHTML='<span style="color:#4ade80;">Updated! Restarting server...</span><br><span style="color:#98989d;">Page will reload in 5 seconds...</span>';
-        setTimeout(()=>location.reload(),5000);
-    }).catch(()=>{document.getElementById('updateStatus').innerHTML='<span style="color:#ff453a;">Update failed. Restart manually.</span>';});
+        if(d.success) document.getElementById('updateStatus').innerHTML='<span style="color:#4ade80;">Updated! Close this terminal and reopen Start Dashboard.bat</span>';
+        else document.getElementById('updateStatus').innerHTML='<span style="color:#ff453a;">Update failed.</span>';
+    }).catch(()=>{document.getElementById('updateStatus').innerHTML='<span style="color:#ff453a;">Update failed.</span>';});
 }
 </script>
 </body>
