@@ -766,5 +766,17 @@
         showLoading(false);setupAutoRefresh();startHCPoller();
     });
     </script>
-<div style="text-align:center;padding:12px;font-size:0.6rem;color:#636366;border-top:1px solid #38383a;margin-top:20px;">PickMatrix v1.0 | Created &amp; managed by ttuyen | HOU8 Pick Operations</div></body>
+<div style="text-align:center;padding:12px;font-size:0.6rem;color:#636366;border-top:1px solid #38383a;margin-top:20px;">PickMatrix v1.1 | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>
+<script>
+// Check for updates on load
+fetch('https://raw.githubusercontent.com/ttuyen099/pick-staffing-evaluator/main/version.txt')
+.then(r=>r.text()).then(remote=>{
+    const local='1.1';
+    remote=remote.trim();
+    const el=document.getElementById('updateStatus');
+    if(remote===local) el.innerHTML='<span style="color:#4ade80;">Up to date</span>';
+    else el.innerHTML='<span style="color:#ff9500;">Update available: v'+remote+' (restart to update)</span>';
+}).catch(()=>{document.getElementById('updateStatus').textContent='';});
+</script>
+</body>
 </html>
