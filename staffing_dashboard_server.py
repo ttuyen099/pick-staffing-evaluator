@@ -597,6 +597,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 # Add permissions loading status
                 current["xtrain_status"] = "ready" if len(data_manager._cached_permissions) > 0 else "loading"
                 current["xtrain_count"] = len(data_manager._cached_permissions)
+                # Always inject latest permissions (they load in background)
+                if data_manager._cached_permissions:
+                    current["cross_training_by_employee_id"] = data_manager._cached_permissions
                 # Add backfill status
                 current["backfill_status"] = backfill_status.get("state", "unknown")
                 current["backfill_progress"] = backfill_status.get("progress", "")
