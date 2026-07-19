@@ -573,6 +573,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._handle_recommend_move()
         elif path == "/api/update-workforce":
             self._handle_update_workforce()
+        elif path == "/api/run-update":
+            self._handle_run_update()
         else:
             self.send_error(404)
     
@@ -827,6 +829,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             'PPSingleOPNonCon': 'OrderPickLowDensityP',
             'PPSingleSSD': 'OrderPick SIOC',
             'PPMultiBldgWide': 'MultiRelayPick',
+            'PPMultiSSD': 'MultiRelayPick',
             'PPMezzPickSSD': 'OrderPick SIOC',
             'PPSingleGiftwrap': 'Giftwrap Picking',
             'PPSingleWrap': 'Giftwrap Picking',
@@ -847,7 +850,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             pickers = payload.get("pickers", [])
             
             # Paths to exclude (not pick paths)
-            EXCLUDE_PATHS = {'PPTrans', 'PPQA', 'PPTransOut', 'PPTransIn', 'PPICQA', 'PPCount'}
+            EXCLUDE_PATHS = {'PPTrans', 'PPQA', 'PPTransOut', 'PPTransIn', 'PPICQA', 'PPCount', 'PPRebinHotpick', 'PPRebin'}
             
             # Build picker set: { fclm_path: list of logins } - includes ALL assigned pickers
             active_by_path = {}
@@ -870,6 +873,35 @@ class DashboardHandler(BaseHTTPRequestHandler):
             
             self._set_headers("application/json")
             self.wfile.write(json.dumps({"success": True, "active_count": total_active}).encode())
+        except Exception as e:
+            self._set_headers("application/json", 500)
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
+    
+    def _handle_run_update(self):
+        """Download latest files from GitHub and restart server."""
+        try:
+            import subprocess
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            updater_path = os.path.join(script_dir, "updater.py")
+            
+            # Run updater
+            result = subprocess.run(
+                [sys.executable, updater_path],
+                cwd=script_dir,
+                capture_output=True, text=True, timeout=30
+            )
+            
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps({"success": True, "output": result.stdout}).encode())
+            
+            # Schedule restart after response is sent
+            import threading
+            def restart():
+                import time
+                time.sleep(2)
+                os.execv(sys.executable, [sys.executable] + [os.path.join(script_dir, "staffing_dashboard_server.py")])
+            threading.Thread(target=restart, daemon=True).start()
+            
         except Exception as e:
             self._set_headers("application/json", 500)
             self.wfile.write(json.dumps({"error": str(e)}).encode())
