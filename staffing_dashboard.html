@@ -760,20 +760,28 @@
             const box = tip.querySelector('.tip-box');
             if (box) {
                 const rect = tip.getBoundingClientRect();
+                // Measure tooltip offscreen first
                 box.style.display = 'block';
                 box.style.left = '-9999px';
                 box.style.top = '0';
                 const boxH = box.offsetHeight;
-                const boxW = box.offsetWidth;
-                // Position to the right of the element
+                const boxW = box.offsetWidth || 280;
+                // Horizontal: right of name, or left if no room
                 let left = rect.right + 12;
-                // If it would go off right edge, put it to the left
-                if (left + boxW > window.innerWidth) left = rect.left - boxW - 12;
+                if (left + boxW > window.innerWidth - 10) left = rect.left - boxW - 12;
                 if (left < 10) left = 10;
-                // Vertically: prefer aligned with row top, but never go off screen
-                let top = rect.top;
-                if (top + boxH > window.innerHeight - 10) top = rect.top - boxH + rect.height;
-                if (top < 10) top = 10;
+                // Vertical: if row is in bottom half of screen, show tooltip ABOVE the row
+                // if row is in top half, show tooltip below/aligned with the row
+                let top;
+                if (rect.top > window.innerHeight / 2) {
+                    // Bottom half - position tooltip above the row
+                    top = rect.top - boxH - 4;
+                    if (top < 10) top = 10;
+                } else {
+                    // Top half - position tooltip aligned with row
+                    top = rect.top;
+                    if (top + boxH > window.innerHeight - 10) top = window.innerHeight - boxH - 10;
+                }
                 box.style.left = left + 'px';
                 box.style.top = top + 'px';
             }
