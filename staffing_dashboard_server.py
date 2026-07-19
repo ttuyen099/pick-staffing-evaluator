@@ -516,6 +516,7 @@ class Poller:
 # Global references (set in main)
 data_manager = None
 poller = None
+backfill_status = {"state": "idle", "progress": ""}
 
 class DashboardHandler(BaseHTTPRequestHandler):
     """HTTP handler for the dashboard server."""
@@ -596,6 +597,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 # Add permissions loading status
                 current["xtrain_status"] = "ready" if len(data_manager._cached_permissions) > 0 else "loading"
                 current["xtrain_count"] = len(data_manager._cached_permissions)
+                # Add backfill status
+                current["backfill_status"] = backfill_status.get("state", "unknown")
+                current["backfill_progress"] = backfill_status.get("progress", "")
                 payload = json.dumps(current)
                 self._set_headers("application/json")
                 self.wfile.write(payload.encode())
@@ -989,12 +993,20 @@ def main():
         print("  (Make sure your Midway session is active in Firefox)")
     
     # Backfill historical data in background (catches up on missed days)
+    global backfill_status
+    backfill_status = {"state": "starting", "progress": ""}
+    
     def run_backfill():
         from rate_history import backfill_history
         try:
+            backfill_status["state"] = "running"
+            backfill_status["progress"] = "Checking missing dates..."
             backfill_history(config, days=14)
+            backfill_status["state"] = "done"
+            backfill_status["progress"] = "Up to date"
         except Exception as e:
-            logger.warning("Backfill error: %s", e)
+            backfill_status["state"] = "error"
+            backfill_status["progress"] = str(e)
     
     threading.Thread(target=run_backfill, daemon=True).start()
     print("  Historical backfill running in background...")

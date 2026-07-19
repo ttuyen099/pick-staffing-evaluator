@@ -352,6 +352,16 @@
             <div class="chip" style="margin-left:auto;"><div class="chip-val" style="font-size:0.85rem;color:#98989d;">${data.timestamp||'--'}</div><div class="chip-lbl">Last Updated</div></div>
         `;
         
+        // Add status indicators for X-Train and History
+        const xtStatus = data.xtrain_status==='ready' ? `<span style="color:#4ade80;">&#10003; ${data.xtrain_count} verified</span>` : `<span style="color:#fbbf24;">&#9696; Verifying permissions...</span>`;
+        const bfStatus = data.backfill_status==='done' ? `<span style="color:#4ade80;">&#10003; Up to date</span>` : data.backfill_status==='running' ? `<span style="color:#fbbf24;">&#9696; ${data.backfill_progress||'Collecting...'}</span>` : `<span style="color:#98989d;">Idle</span>`;
+        document.getElementById('summary').innerHTML += `
+            <div style="display:flex;gap:16px;width:100%;margin-top:6px;font-size:0.65rem;">
+                <span style="color:#98989d;">X-Train: ${xtStatus}</span>
+                <span style="color:#98989d;">History: ${bfStatus}</span>
+            </div>
+        `;
+        
         // X-Train availability - count active pickers with verified perms for other depts
         const ctMap2=data.cross_training_by_employee_id||{};
         const deptAvail={Stow:0,Pack:0,Receive:0,'Ship Dock':0,ICQA:0};
@@ -382,7 +392,7 @@
             tabsHtml += `<div class="path-tab ${isActive?'active':''} ${p.hitting?'hitting':'missing'}" onclick="selectPath('${p.name}')">${p.name}<span class="tab-rate">${hcLabel} HC</span></div>`;
         }
         tabsHtml += `<div class="path-tab ${selectedPath==='attrition'?'active':''}" onclick="selectPath('attrition')" style="border-color:#ff950050;">Attrition<span class="tab-rate">${getAttrition().length}</span></div>`;
-        tabsHtml += `<div class="path-tab ${selectedPath==='xtrain'?'active':''}" onclick="selectPath('xtrain')" style="margin-left:auto;border-color:#007aff50;">X-Train Lookup ${data.xtrain_status==='ready'?'<span style=\"color:#4ade80;font-size:0.6rem;\">&#9679; '+data.xtrain_count+'</span>':'<span style=\"color:#fbbf24;font-size:0.6rem;\">loading...</span>'}</div>`;
+        tabsHtml += `<div class="path-tab ${selectedPath==='xtrain'?'active':''}" onclick="selectPath('xtrain')" style="margin-left:auto;border-color:#007aff50;">X-Train ${data.xtrain_status==='ready'?'<span style=\"color:#4ade80;\">&#10003; '+data.xtrain_count+'</span>':'<span style=\"color:#fbbf24;\">&#9696; verifying...</span>'}</div>`;
         document.getElementById('pathTabs').innerHTML = tabsHtml;
 
         // Path cards
