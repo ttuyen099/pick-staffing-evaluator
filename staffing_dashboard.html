@@ -767,11 +767,12 @@
                 const boxW = box.offsetWidth;
                 // Position to the right of the element
                 let left = rect.right + 12;
-                let top = rect.top;
                 // If it would go off right edge, put it to the left
                 if (left + boxW > window.innerWidth) left = rect.left - boxW - 12;
-                // If it would go off bottom, move up
-                if (top + boxH > window.innerHeight - 10) top = window.innerHeight - boxH - 10;
+                if (left < 10) left = 10;
+                // Vertically: prefer aligned with row top, but never go off screen
+                let top = rect.top;
+                if (top + boxH > window.innerHeight - 10) top = rect.top - boxH + rect.height;
                 if (top < 10) top = 10;
                 box.style.left = left + 'px';
                 box.style.top = top + 'px';
