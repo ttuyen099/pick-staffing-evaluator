@@ -735,14 +735,16 @@
                 const r=await fetch(API+'/api/data');
                 if(r.ok){
                     const fresh=await r.json();
-                    if(fresh.active_workforce){
-                        data.active_workforce=fresh.active_workforce;
-                        // Update just the summary chips and path tabs without full re-render
-                        const aw=data.active_workforce||{};
-                        const totalActiveHC=Object.values(aw).reduce((s,v)=>s+v.length,0);
-                        // Re-render to update HC numbers
-                        if(data.paths) render();
-                    }
+                    // Update all live fields
+                    data.active_workforce=fresh.active_workforce||data.active_workforce;
+                    data.xtrain_status=fresh.xtrain_status;
+                    data.xtrain_count=fresh.xtrain_count;
+                    data.backfill_status=fresh.backfill_status;
+                    data.backfill_progress=fresh.backfill_progress;
+                    data.cross_training_by_employee_id=fresh.cross_training_by_employee_id||data.cross_training_by_employee_id;
+                    data.history_summary=fresh.history_summary||data.history_summary;
+                    data.eid_to_login=fresh.eid_to_login||data.eid_to_login;
+                    if(data.paths) render();
                 }
             }catch(e){}
         },30000);
