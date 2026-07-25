@@ -60,6 +60,14 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
+# Cookie Cache (prevents concurrent Firefox DB read conflicts)
+# ============================================================
+_cookie_cache = {}       # Cached result from get_midway_cookies
+_cookie_cache_time = 0   # time.time() when cache was populated
+_COOKIE_CACHE_TTL = 300  # Cache cookies for 5 minutes (they don't change often)
+
+
+# ============================================================
 # Configuration
 # ============================================================
 
@@ -156,8 +164,9 @@ def extract_firefox_cookies(domain, profile_path=None):
         logger.error("Firefox cookie database not found: %s", cookie_db_path)
         return {}
 
-    # Firefox may lock the database, so copy to a temp file
-    temp_db_path = os.path.join(os.environ.get("TEMP", "."), "firefox_cookies_temp.sqlite")
+    # Firefox may lock the database, so copy to a temp file (unique name to avoid concurrent conflicts)
+    import uuid as _uuid
+    temp_db_path = os.path.join(os.environ.get("TEMP", "."), f"firefox_cookies_{_uuid.uuid4().hex[:8]}.sqlite")
     try:
         shutil.copy2(cookie_db_path, temp_db_path)
     except PermissionError:
@@ -328,6 +337,13 @@ def get_midway_cookies(config):
 
     Supports: firefox_auto (default), chrome_auto, manual
     """
+    global _cookie_cache, _cookie_cache_time
+
+    # Return cached cookies if still fresh (avoids re-reading the Firefox DB)
+    if _cookie_cache and (time.time() - _cookie_cache_time) < _COOKIE_CACHE_TTL:
+        logger.info("Using cached cookies (%d seconds old)", int(time.time() - _cookie_cache_time))
+        return _cookie_cache
+
     cookie_config = config.get("cookie_settings", {})
     method = cookie_config.get("method", "firefox_auto")
 
@@ -396,6 +412,10 @@ def get_midway_cookies(config):
         logger.info(
             "Sending %d cookies (filtered from %d)", len(cookies), len(raw_cookies),
         )
+
+    # Cache the result so concurrent/subsequent calls don't re-read Firefox DB
+    _cookie_cache = cookies
+    _cookie_cache_time = time.time()
 
     return cookies
 
