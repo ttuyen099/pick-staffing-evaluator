@@ -40,6 +40,20 @@
         /* Path Grid */
         .path-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; align-items: start; }
 
+        /* Two-column Overview layout: move log (left) + path cards (right) */
+        .overview-cols { display: grid; grid-template-columns: minmax(440px, 1fr) 1.5fr; gap: 16px; align-items: start; }
+        .overview-cols.single { display: block; }
+        .overview-cols.single .overview-left { display: none; }
+        .overview-left { position: sticky; top: 108px; }
+        .overview-right { min-width: 0; }
+        #moveLogTableWrap thead th { position: sticky; top: 0; z-index: 2; }
+        /* Move-log table sized to match the associate tables */
+        .movelog-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; table-layout: fixed; }
+        .movelog-table th { padding: 8px 10px; text-align: left; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; color: #636366; border-bottom: 1px solid #38383a; background: #000000; white-space: nowrap; }
+        .movelog-table td { padding: 7px 10px; border-bottom: 1px solid #2c2c2e; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .movelog-table tr:hover td { background: #1e3a5f15; }
+        @media (max-width: 1100px) { .overview-cols { grid-template-columns: 1fr; } .overview-left { position: static; } }
+
         /* Path Tabs - sticky below control bar */
         .path-tabs { display: flex; gap: 6px; padding: 10px 20px; background: rgba(28,28,30,0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid #38383a; flex-wrap: wrap; position: sticky; top: 50px; z-index: 90; }
         .path-tab { padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; cursor: pointer; border: 1px solid #38383a; background: #2c2c2e; color: #98989d; transition: all 0.15s; white-space: nowrap; }
@@ -151,10 +165,15 @@
 
         /* Tooltip */
         .has-tip { position: relative; cursor: help; }
-        .tip-box { display: none; position: fixed; z-index: 100; background: #1e293b; border: 1px solid #007aff; border-radius: 12px; padding: 14px 18px; font-size: 0.78rem; white-space: nowrap; box-shadow: 0 8px 30px rgba(0,0,0,0.7); min-width: 240px; max-width: 340px; max-height: 200px; overflow-y: auto; pointer-events: none; }
-        .tip-box .tip-title { color: #ffffff; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; margin-top: 6px; }
-        .tip-box .tip-title:first-child { margin-top: 0; }
-        .tip-box .tip-yes { color: #4ade80; padding: 2px 0; }
+        /* Inline .tip-box is now only a hidden data holder; the visible tooltip
+           is #globalTip appended to <body> so it is never clipped/re-anchored
+           by an ancestor's backdrop-filter. */
+        .tip-box { display: none !important; }
+        #globalTip { display: none; position: fixed; z-index: 3000; background: #1e293b; border: 1px solid #007aff; border-radius: 12px; padding: 14px 18px; font-size: 0.78rem; white-space: nowrap; box-shadow: 0 8px 30px rgba(0,0,0,0.7); min-width: 240px; max-width: 340px; max-height: 240px; overflow-y: auto; pointer-events: none; }
+        #globalTip .tip-title { color: #ffffff; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; margin-top: 6px; }
+        #globalTip .tip-title:first-child { margin-top: 0; }
+        #globalTip .tip-yes { color: #4ade80; padding: 2px 0; }
+        #globalTip .tip-no { color: #f87171; padding: 2px 0; }
         .tip-box .tip-no { color: #f87171; padding: 2px 0; }
         .loading.hidden { display: none; }
         .spinner { width: 32px; height: 32px; border: 3px solid #38383a; border-top-color: #007aff; border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -213,10 +232,17 @@
     <div class="main">
         <div class="summary" id="summary"></div>
         <div class="path-tabs" id="pathTabs"></div>
-        <div class="path-grid" id="pathGrid"></div>
+        <div class="overview-cols" id="overviewCols">
+            <div class="overview-left" id="moveLogSection"></div>
+            <div class="overview-right"><div class="path-grid" id="pathGrid"></div></div>
+        </div>
     </div>
 
-    <div class="loading" id="loading"><div class="spinner"></div><span>Loading from FCLM...</span></div>
+    <div class="loading" id="loading"><div class="spinner"></div><span>PickMatrix loading...</span></div>
+
+    <!-- Single body-level tooltip (rendered outside any backdrop-filtered card
+         so position:fixed is truly viewport-relative and never clipped). -->
+    <div id="globalTip"></div>
 
     <!-- Recommendation Modal -->
     <div id="recModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:2000;align-items:center;justify-content:center;" onclick="closeRec()">
@@ -232,6 +258,7 @@
     <script>
     let data = null, refreshTimer = null, countdownTimer = null, nextRefresh = null, refreshMin = 15;
     let openPaths = new Set(), ctOpen = false, ctDept = 'All', selectedPath = null;
+    let moveLog = [], moveLogFilter = '', moveLogScroll = 0, moveLogRange = 'shift';
     let customGoals = JSON.parse(localStorage.getItem('staffing_goals') || '{}');
     const API = window.location.origin;
     const DC = {'Pick':'pick','Stow':'stow','Receive':'receive','Pack':'pack','Ship Dock':'ship-dock','IB Dock':'ib-dock','ICQA':'icqa','VRets':'vrets'};
@@ -258,8 +285,8 @@
         try {
             const r=await fetch(API+'/api/set-time-range',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start_time:s,end_time:e})});
             const res=await r.json();
-            if(res.success&&res.data){data=res.data;render();setStatus('ok','Updated '+time());}
-            else if(res.success){setStatus('ok','No data for this time range');} 
+            if(res.success&&res.data){data=res.data;await fetchMoveLog();render();setStatus('ok','Updated '+time());}
+            else if(res.success){await fetchMoveLog();render();setStatus('ok','No data for this time range');} 
             else{setStatus('error','Fetch failed');}
         } catch(e){setStatus('error','Connection error');}
         showLoading(false);
@@ -267,7 +294,7 @@
 
     async function manualRefresh() {
         showLoading(true); setStatus('fetching','Refreshing...');
-        try { const r=await fetch(API+'/api/refresh'); const res=await r.json(); if(res.success&&res.data){data=res.data;render();setStatus('ok','Refreshed '+time());resetCountdown();}else setStatus('error','Failed'); } catch(e){setStatus('error','Error');}
+        try { const r=await fetch(API+'/api/refresh'); const res=await r.json(); if(res.success&&res.data){data=res.data;await fetchMoveLog();render();setStatus('ok','Refreshed '+time());resetCountdown();}else setStatus('error','Failed'); } catch(e){setStatus('error','Error');}
         showLoading(false);
     }
 
@@ -513,6 +540,166 @@
         document.getElementById('pathGrid').innerHTML=html;
         document.getElementById('pathGrid').style.gridTemplateColumns = (selectedPath && selectedPath!=='xtrain') ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))';
 
+        // Two-column overview only when no specific view is selected
+        const cols = document.getElementById('overviewCols');
+        if (cols) cols.classList.toggle('single', !!selectedPath);
+
+        renderMoveLog();
+    }
+
+    // ============================================================
+    // Path Move Log (Overview tab)
+    // Shows each picker moved from process path A -> B, and when.
+    // Data comes from the server's /api/move-log endpoint, which reads
+    // the auto-detected moves the backend logs each refresh.
+    // ============================================================
+    async function fetchMoveLog() {
+        try {
+            const r = await fetch(API + '/api/move-log?' + moveLogQuery());
+            if (r.ok) {
+                const res = await r.json();
+                if (res.success) { moveLog = res.moves || []; }
+            }
+        } catch(e) { /* leave moveLog as-is */ }
+    }
+
+    // Build the query string for the move-log endpoint from the selected range.
+    function moveLogQuery() {
+        const p = new URLSearchParams();
+        p.set('limit', '500');
+        if (moveLogRange === 'shift') {
+            // Prefer the top-bar Start/End inputs; if they're not populated yet,
+            // compute the current shift window directly so we never fall back to
+            // "all time" and show months-old data.
+            let s = (document.getElementById('startTime') || {}).value || '';
+            let e = (document.getElementById('endTime') || {}).value || '';
+            if (!s || !e) {
+                try {
+                    const w = getShiftWindow();
+                    s = fmt(w.start); e = fmt(w.end);
+                } catch(_) {}
+            }
+            if (s) p.set('start', s);
+            if (e) p.set('end', e);
+        } else if (moveLogRange === '4h') {
+            p.set('hours', '4');
+        } else if (moveLogRange === '12h') {
+            p.set('hours', '12');
+        } // 'all' -> no time filter
+        return p.toString();
+    }
+
+    async function changeMoveLogRange(sel) {
+        moveLogRange = sel.value;
+        moveLogScroll = 0;
+        await fetchMoveLog();
+        renderMoveLogTable();
+    }
+
+    function moveLogFilterInput(el) {
+        moveLogFilter = (el.value || '').trim().toLowerCase();
+        renderMoveLogTable();
+    }
+
+    function renderMoveLog() {
+        const section = document.getElementById('moveLogSection');
+        if (!section) return;
+        // Only show on the Overview tab
+        if (selectedPath) { section.style.display = 'none'; return; }
+        section.style.display = '';
+
+        // Build the outer shell only once so the search box and scroll
+        // container persist across refreshes (scroll position is not reset).
+        if (!document.getElementById('moveLogTableWrap')) {
+            section.innerHTML = `
+                <div style="background:rgba(28,28,30,0.95);border:1px solid #38383a;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100vh - 140px);">
+                    <div style="padding:12px 16px;border-bottom:1px solid #38383a;flex:0 0 auto;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+                            <h3 style="color:#fff;font-size:0.9rem;font-weight:600;">Path Move Log</h3>
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <select id="moveLogRangeSel" onchange="changeMoveLogRange(this)" title="Time range" style="background:#1c1c1e;border:1px solid #38383a;color:#e0e0e0;padding:4px 6px;border-radius:5px;font-size:0.7rem;">
+                                    <option value="shift">This shift</option>
+                                    <option value="4h">Last 4h</option>
+                                    <option value="12h">Last 12h</option>
+                                    <option value="all">All</option>
+                                </select>
+                                <button class="btn secondary" onclick="refreshMoveLog()" style="padding:5px 10px;">Refresh</button>
+                                <button class="btn" onclick="exportMoveLog()" style="padding:5px 10px;" title="Export end-of-shift CSV">Export CSV</button>
+                            </div>
+                        </div>
+                        <input type="text" id="moveLogSearch" placeholder="Filter by login or path..." value="${moveLogFilter}" oninput="moveLogFilterInput(this)" style="width:100%;background:#1c1c1e;border:1px solid #38383a;color:#e0e0e0;padding:6px 10px;border-radius:6px;font-size:0.75rem;">
+                    </div>
+                    <div id="moveLogTableWrap" onscroll="moveLogScroll=this.scrollTop" style="overflow-y:auto;flex:1 1 auto;padding:0 4px 4px;"></div>
+                </div>`;
+            const rsel = document.getElementById('moveLogRangeSel');
+            if (rsel) rsel.value = moveLogRange;
+        }
+        renderMoveLogTable();
+    }
+
+    function renderMoveLogTable() {
+        const wrap = document.getElementById('moveLogTableWrap');
+        if (!wrap) return;
+
+        const q = moveLogFilter;
+        const rows = (moveLog || []).filter(m => {
+            if (!q) return true;
+            return (m.login || '').toLowerCase().includes(q)
+                || (m.name || '').toLowerCase().includes(q)
+                || (m.from_path || '').toLowerCase().includes(q)
+                || (m.to_path || '').toLowerCase().includes(q);
+        });
+
+        let body;
+        if (rows.length === 0) {
+            body = `<tr><td colspan="3" style="color:#636366;text-align:center;padding:20px;font-size:0.75rem;">${(moveLog||[]).length===0 ? 'No path moves detected yet. Moves are logged automatically as pickers change paths.' : 'No moves match your filter.'}</td></tr>`;
+        } else {
+            body = rows.map(m => {
+                const t = (m.timestamp || '').replace('T', ' ').slice(5, 16); // MM-DD HH:MM
+                const dot = m.source === 'auto'
+                    ? '<span title="Auto-detected" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#4ade80;margin-right:5px;vertical-align:middle;"></span>'
+                    : '<span title="Manual" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#fbbf24;margin-right:5px;vertical-align:middle;"></span>';
+                const who = m.login || m.employee_id || '--';
+                const nameTitle = (m.name || '').replace(/"/g, '&quot;');
+                return `<tr title="${nameTitle}">
+                    <td style="color:#94a3b8;">${dot}${who}</td>
+                    <td><span style="color:#f87171;">${m.from_path || '--'}</span> <span style="color:#636366;">→</span> <span style="color:#4ade80;">${m.to_path || '--'}</span></td>
+                    <td style="color:#98989d;font-variant-numeric:tabular-nums;">${t || '--'}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        wrap.innerHTML = `
+            <table class="movelog-table">
+                <colgroup><col style="width:26%"><col style="width:54%"><col style="width:20%"></colgroup>
+                <thead><tr>
+                    <th>Login</th><th>From → To</th><th>Time</th>
+                </tr></thead>
+                <tbody>${body}</tbody>
+            </table>`;
+        // Restore the saved scroll position so a refresh doesn't jump to top
+        wrap.scrollTop = moveLogScroll;
+    }
+
+    async function refreshMoveLog() {
+        await fetchMoveLog();
+        renderMoveLogTable();
+    }
+
+    // Download the end-of-shift CSV for the current time-range selection.
+    // Exports all pickers in the window (an EOS report wants everyone); the
+    // on-screen text filter is a view convenience and is intentionally not
+    // applied here so a path-fragment filter can't produce an empty report.
+    function exportMoveLog() {
+        const p = new URLSearchParams(moveLogQuery());
+        p.delete('limit');
+        const url = API + '/api/move-log/export?' + p.toString();
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     }
 
     function togglePath(ev, name) {
@@ -725,7 +912,7 @@
     }
 
     // Auto-refresh
-    function setupAutoRefresh(){if(refreshTimer)clearInterval(refreshTimer);if(countdownTimer)clearInterval(countdownTimer);if(refreshMin<=0){document.getElementById('countdown').textContent='(off)';return;}const ms=refreshMin*60000;nextRefresh=Date.now()+ms;refreshTimer=setInterval(async()=>{setStatus('fetching','Auto-refreshing...');if(await fetchData()){render();setStatus('ok','Refreshed '+time());}else setStatus('error','Failed');nextRefresh=Date.now()+ms;},ms);countdownTimer=setInterval(()=>{if(!nextRefresh)return;const rem=Math.max(0,nextRefresh-Date.now()),m=Math.floor(rem/60000),s=Math.floor((rem%60000)/1000);document.getElementById('countdown').textContent=`(${m}:${s.toString().padStart(2,'0')})`;},1000);}
+    function setupAutoRefresh(){if(refreshTimer)clearInterval(refreshTimer);if(countdownTimer)clearInterval(countdownTimer);if(refreshMin<=0){document.getElementById('countdown').textContent='(off)';return;}const ms=refreshMin*60000;nextRefresh=Date.now()+ms;refreshTimer=setInterval(async()=>{setStatus('fetching','Auto-refreshing...');if(await fetchData()){await fetchMoveLog();render();setStatus('ok','Refreshed '+time());}else setStatus('error','Failed');nextRefresh=Date.now()+ms;},ms);countdownTimer=setInterval(()=>{if(!nextRefresh)return;const rem=Math.max(0,nextRefresh-Date.now()),m=Math.floor(rem/60000),s=Math.floor((rem%60000)/1000);document.getElementById('countdown').textContent=`(${m}:${s.toString().padStart(2,'0')})`;},1000);}
     function resetCountdown(){if(refreshMin>0)nextRefresh=Date.now()+refreshMin*60000;}
 
     // Fast HC polling - updates active/inactive headcount every 30 seconds
@@ -744,6 +931,7 @@
                     data.cross_training_by_employee_id=fresh.cross_training_by_employee_id||data.cross_training_by_employee_id;
                     data.history_summary=fresh.history_summary||data.history_summary;
                     data.eid_to_login=fresh.eid_to_login||data.eid_to_login;
+                    await fetchMoveLog();
                     if(data.paths) render();
                 }
             }catch(e){}
@@ -757,26 +945,41 @@
     document.addEventListener('mouseover', function(e) {
         const tip = e.target.closest('.has-tip');
         if (tip) {
-            const box = tip.querySelector('.tip-box');
-            if (box) {
+            const src = tip.querySelector('.tip-box');
+            const gt = document.getElementById('globalTip');
+            if (src && gt) {
                 const rect = tip.getBoundingClientRect();
-                box.style.display = 'block';
-                // Position relative to viewport (fixed), clamped within visible area
-                let left = Math.min(rect.right + 12, window.innerWidth - 300);
-                if (left < 10) left = 10;
-                // Place at the row's Y position, but clamp between 60px from top and 210px from bottom
+                // Copy the cell's tooltip content into the body-level tooltip
+                gt.innerHTML = src.innerHTML;
+                gt.style.display = 'block';
+                const bw = gt.offsetWidth || 300;
+                const bh = gt.offsetHeight || 160;
+                const margin = 10;
+                const vh = window.innerHeight;
+                const vw = window.innerWidth;
+
+                // Horizontal: prefer right of the cell, flip left if no room.
+                let left = rect.right + 12;
+                if (left + bw > vw - margin) left = rect.left - bw - 12;
+                if (left < margin) left = margin;
+                if (left + bw > vw - margin) left = Math.max(margin, vw - bw - margin);
+
+                // Vertical: near the row, but lift up so the whole box stays
+                // on-screen (never off the bottom).
                 let top = rect.top;
-                top = Math.max(60, Math.min(top, window.innerHeight - 210));
-                box.style.left = left + 'px';
-                box.style.top = top + 'px';
+                if (top + bh > vh - margin) top = vh - bh - margin;
+                if (top < margin) top = margin;
+
+                gt.style.left = left + 'px';
+                gt.style.top = top + 'px';
             }
         }
     });
     document.addEventListener('mouseout', function(e) {
         const tip = e.target.closest('.has-tip');
         if (tip) {
-            const box = tip.querySelector('.tip-box');
-            if (box) box.style.display = 'none';
+            const gt = document.getElementById('globalTip');
+            if (gt) gt.style.display = 'none';
         }
     });
     function fmt(d){return d.getFullYear()+'-'+(d.getMonth()+1+'').padStart(2,'0')+'-'+(d.getDate()+'').padStart(2,'0')+'T'+(d.getHours()+'').padStart(2,'0')+':'+(d.getMinutes()+'').padStart(2,'0');}
@@ -799,7 +1002,7 @@
             // Tell server the shift and time range, then fetch
             await fetch(API+'/api/set-shift',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({shift:savedShift||autoShift})}).catch(()=>{});
             await new Promise(r=>setTimeout(r,500));
-            if(await fetchData()){render();setStatus('ok','Loaded '+time());if(data.refresh_interval_minutes){refreshMin=data.refresh_interval_minutes;document.getElementById('refreshInterval').value=refreshMin;}}
+            if(await fetchData()){await fetchMoveLog();render();setStatus('ok','Loaded '+time());if(data.refresh_interval_minutes){refreshMin=data.refresh_interval_minutes;document.getElementById('refreshInterval').value=refreshMin;}}
             else{setStatus('error','Failed to connect');document.getElementById('pathGrid').innerHTML='<div style="text-align:center;padding:60px;color:#64748b;grid-column:1/-1;"><h2 style="color:#94a3b8;">No Data</h2><p>Run: python staffing_dashboard_server.py</p></div>';}
         } catch(err) {
             console.error('Render error:', err);

@@ -24,6 +24,38 @@ logger = logging.getLogger(__name__)
 DB_PATH = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'PickMatrix', "rate_history.db")
 
 
+# Map the FCLM path names used for move detection to the Picking Console
+# process-path names operators actually see (PPSingle*, PPMulti*, etc.).
+# FCLM collapses several console sub-paths into one bucket, so for those buckets
+# we show BOTH console names (e.g. "PPSingleOPBOD / PPSingleOPNonCon") since FCLM
+# alone cannot tell which sub-path the move was on.
+FCLM_TO_CONSOLE_PATH = {
+    "RF Pick Singles": "PPSingleFloor",
+    "OrderPickVNA": "PPSingleOPVNA",
+    "Orderpicker Pick": "PPSingleOP",
+    "OrderPickLowDensityP": "BOD/NonCon",
+    "OrderPick SIOC": "PPSingleSSD",
+    "MultiRelayPick": "PPMulti-BldgWide/SSD",
+    "Giftwrap Picking": "PPSingleGiftwrap",
+    "RF Pick": "PPSingleRFPick",
+    "Pallet Pick": "PPPalletPick",
+    "Teamlift Pick": "PPTeamlift",
+}
+
+
+def to_console_path(name):
+    """Return the Picking Console process-path name for an FCLM path name.
+
+    If the name is already a console-style name (starts with 'PP') or is
+    unknown, it is returned unchanged so nothing is ever lost.
+    """
+    if not name:
+        return name
+    if name in FCLM_TO_CONSOLE_PATH:
+        return FCLM_TO_CONSOLE_PATH[name]
+    return name
+
+
 def _get_db():
     """Get DB connection with learning tables."""
     conn = sqlite3.connect(DB_PATH)
@@ -86,9 +118,69 @@ def _get_db():
             last_updated TEXT
         )
     """)
-    
+
+    # Authoritative employee_id -> login map, bridged from the Picking Console
+    # workforce feed (login) joined to FCLM (employee_id) on AA name.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS employee_login_map (
+            employee_id TEXT PRIMARY KEY,
+            login TEXT NOT NULL,
+            last_updated TEXT NOT NULL
+        )
+    """)
+
     conn.commit()
     return conn
+
+
+def upsert_employee_logins(mapping):
+    """
+    Persist employee_id -> login pairs (from the Picking Console bridge).
+
+    Also backfills the login onto any existing move_log rows for that
+    employee_id that are missing it, so the move log immediately shows the
+    login instead of just the employee id.
+
+    Args:
+        mapping: dict {employee_id: login}
+
+    Returns:
+        Number of employee_ids written.
+    """
+    if not mapping:
+        return 0
+
+    conn = _get_db()
+    cursor = conn.cursor()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    for eid, login in mapping.items():
+        if not eid or not login:
+            continue
+        cursor.execute("""
+            INSERT INTO employee_login_map (employee_id, login, last_updated)
+            VALUES (?, ?, ?)
+            ON CONFLICT(employee_id) DO UPDATE SET login=excluded.login, last_updated=excluded.last_updated
+        """, (eid, login, now))
+        # Backfill move_log rows that never got a login
+        cursor.execute("""
+            UPDATE move_log SET login = ?
+            WHERE employee_id = ? AND (login IS NULL OR login = '')
+        """, (login, eid))
+
+    conn.commit()
+    conn.close()
+    return len(mapping)
+
+
+def get_employee_login_map():
+    """Return the persisted employee_id -> login map."""
+    conn = _get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT employee_id, login FROM employee_login_map")
+    rows = cursor.fetchall()
+    conn.close()
+    return {r[0]: r[1] for r in rows}
 
 
 def log_move_decision(employee_id, login, name, from_path, to_path, from_rate, goal_uph, predicted_verdict, predicted_confidence):
@@ -457,3 +549,395 @@ def get_learning_summary():
         "tracked_associates": tracked_associates,
         "learned_path_pairs": learned_pairs,
     }
+
+
+# Console process paths that are NOT part of the pickable/fungible move log.
+# Moves into or out of these are ignored (problem-solve, transship, counts...).
+_CONSOLE_EXCLUDE_PATHS = {
+    'PPTrans', 'PPTransOut', 'PPTransIn', 'PPQA', 'PPICQA', 'PPCount',
+    'PPRebinHotpick', 'PPRebin',
+}
+
+
+def detect_console_moves(pickers, rate_expectations=None, default_goal=5):
+    """
+    Detect and log path moves directly from the Picking Console workforce feed.
+
+    This is the authoritative move source. Each picker in the feed carries:
+        userId      -> the AA login
+        processPath -> the exact console path (PPSingleOP, PPSingleOPNonCon, ...)
+        name        -> AA name (used only to enrich the row, never required)
+
+    On each push we compare a picker's current processPath to the last one we
+    saw for that login. If it changed, we log a move with the console path names
+    stored directly (no FCLM, no employee_id, no name mapping needed).
+
+    Args:
+        pickers: list of picker dicts from the console feed (pickerStatusList).
+        rate_expectations: optional {path: goal_uph} for context (best-effort).
+        default_goal: fallback goal.
+
+    Returns:
+        Number of moves detected this call.
+    """
+    if not pickers:
+        return 0
+
+    rate_expectations = rate_expectations or {}
+
+    conn = _get_db()
+    cursor = conn.cursor()
+
+    # Track last-known console path per login
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS last_known_console_path (
+            login TEXT PRIMARY KEY,
+            process_path TEXT NOT NULL,
+            name TEXT,
+            last_seen TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    moves_detected = 0
+
+    # Build current snapshot: login -> (processPath, name)
+    current = {}
+    for p in pickers:
+        login = p.get("userId") or p.get("login", "")
+        pp = p.get("processPath", "")
+        if not login or not pp:
+            continue
+        # Skip non-pickable paths
+        if pp in _CONSOLE_EXCLUDE_PATHS or pp.startswith('PPTrans') or pp.startswith('PPQA'):
+            continue
+        current[login] = (pp, p.get("name", ""))
+
+    for login, (pp, name) in current.items():
+        cursor.execute("SELECT process_path FROM last_known_console_path WHERE login = ?", (login,))
+        row = cursor.fetchone()
+
+        if row and row[0] != pp:
+            prev_path = row[0]
+            # Avoid duplicate logging if we already logged this exact move recently
+            recent_cutoff = (datetime.now() - timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute("""
+                SELECT id FROM move_log
+                WHERE login = ? AND from_path = ? AND to_path = ? AND timestamp >= ?
+            """, (login, prev_path, pp, recent_cutoff))
+            if not cursor.fetchone():
+                goal = rate_expectations.get(pp, default_goal)
+                cursor.execute("""
+                    INSERT INTO move_log (timestamp, employee_id, login, name, from_path, to_path, from_rate, goal_uph, predicted_verdict, predicted_confidence)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    now_str, "", login, name, prev_path, pp, 0, goal,
+                    "AUTO-DETECTED", "auto"
+                ))
+                moves_detected += 1
+                logger.info("  Console move: %s from %s -> %s", login, prev_path, pp)
+
+        cursor.execute("""
+            INSERT OR REPLACE INTO last_known_console_path (login, process_path, name, last_seen)
+            VALUES (?, ?, ?, ?)
+        """, (login, pp, name, now_str))
+
+    if moves_detected > 0:
+        logger.info("Detected %d console moves this push", moves_detected)
+
+    conn.commit()
+    conn.close()
+    return moves_detected
+
+
+def get_recent_moves(login=None, employee_id=None, hours=None, limit=200, start=None, end=None):
+    """
+    Read the path-move data log for the dashboard.
+
+    Returns each detected/logged move of a picker from one process path to
+    another, newest first. Every row records who moved (login/name/employee_id),
+    the path they moved FROM, the path they moved TO, and WHEN it happened.
+
+    Args:
+        login: Optional case-insensitive login filter (exact match).
+        employee_id: Optional employee_id filter (exact match).
+        hours: Optional look-back window in hours (e.g. 12 = only moves in the
+               last 12 hours). None returns everything within `limit`.
+        limit: Max number of rows to return.
+        start: Optional lower bound timestamp "YYYY-MM-DD HH:MM:SS"
+               (or ISO "YYYY-MM-DDTHH:MM"). Moves at/after this time.
+        end:   Optional upper bound timestamp. Moves at/before this time.
+               start/end let the UI show only the moves within a shift window.
+
+    Returns:
+        list[dict]: [{timestamp, employee_id, login, name, from_path, to_path,
+                      from_rate, source}, ...]
+    """
+    def _norm_ts(v):
+        if not v:
+            return None
+        v = v.replace("T", " ").strip()
+        # Accept "YYYY-MM-DD HH:MM" and pad seconds
+        if len(v) == 16:
+            v += ":00"
+        return v
+
+    start = _norm_ts(start)
+    end = _norm_ts(end)
+
+    conn = _get_db()
+    cursor = conn.cursor()
+
+    where = []
+    params = []
+
+    # Only show moves detected from the Picking Console. Legacy FCLM-detected
+    # rows use FCLM bucket names (e.g. "OrderPickLowDensityP", "Orderpicker
+    # Pick"); we exclude any row whose from/to path is one of those names so the
+    # log reflects console process paths only.
+    fclm_names = list(FCLM_TO_CONSOLE_PATH.keys())
+    if fclm_names:
+        qm = ",".join("?" for _ in fclm_names)
+        where.append(f"from_path NOT IN ({qm})")
+        params.extend(fclm_names)
+        where.append(f"to_path NOT IN ({qm})")
+        params.extend(fclm_names)
+
+    # Note: the login filter is applied in Python AFTER we recover any missing
+    # logins from rate_history, so a move row with a blank stored login can
+    # still be matched by the login we recover for it.
+    if employee_id:
+        where.append("employee_id = ?")
+        params.append(employee_id)
+    if start:
+        where.append("timestamp >= ?")
+        params.append(start)
+    if end:
+        where.append("timestamp <= ?")
+        params.append(end)
+    if hours and hours > 0 and not (start or end):
+        cutoff = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+        where.append("timestamp >= ?")
+        params.append(cutoff)
+
+    where_clause = ("WHERE " + " AND ".join(where)) if where else ""
+
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        limit = 200
+    if limit <= 0 or limit > 1000:
+        limit = 200
+
+    # Pull a bit more than requested so post-filtering by login still returns
+    # a full page when a filter is supplied.
+    fetch_limit = limit * 5 if login else limit
+    if fetch_limit > 5000:
+        fetch_limit = 5000
+
+    cursor.execute(f"""
+        SELECT timestamp, employee_id, login, name, from_path, to_path,
+               from_rate, predicted_verdict
+        FROM move_log
+        {where_clause}
+        ORDER BY timestamp DESC, id DESC
+        LIMIT {fetch_limit}
+    """, params)
+
+    rows = cursor.fetchall()
+
+    # Recover logins/names for rows where move_log stored a blank login.
+    # Priority 1: the authoritative employee_login_map (Picking Console bridge).
+    # Priority 2: the most recent rate_history entry that has a login.
+    missing_ids = {r[1] for r in rows if not (r[2] or "")}
+    recovered = {}
+    if missing_ids:
+        qmarks = ",".join("?" for _ in missing_ids)
+        # Authoritative bridge map first
+        cursor.execute(f"""
+            SELECT employee_id, login FROM employee_login_map
+            WHERE employee_id IN ({qmarks}) AND login IS NOT NULL AND login <> ''
+        """, list(missing_ids))
+        for eid, lg in cursor.fetchall():
+            recovered[eid] = (lg, "")
+        # rate_history fallback for anything still unresolved
+        still = [e for e in missing_ids if e not in recovered]
+        if still:
+            qm2 = ",".join("?" for _ in still)
+            cursor.execute(f"""
+                SELECT employee_id, login, name FROM rate_history
+                WHERE employee_id IN ({qm2})
+                  AND login IS NOT NULL AND login <> ''
+                ORDER BY recorded_at DESC
+            """, still)
+            for eid, lg, nm in cursor.fetchall():
+                if eid not in recovered:  # first (most recent) wins
+                    recovered[eid] = (lg, nm)
+
+    conn.close()
+
+    login_lc = login.lower() if login else None
+    result = []
+    for r in rows:
+        eid = r[1]
+        lg = r[2] or ""
+        nm = r[3] or ""
+        if not lg and eid in recovered:
+            rlg, rnm = recovered[eid]
+            lg = rlg or lg
+            nm = nm or (rnm or "")
+        # Apply the login filter after recovery
+        if login_lc is not None and lg.lower() != login_lc:
+            continue
+        result.append({
+            "timestamp": r[0],
+            "employee_id": eid,
+            "login": lg,
+            "name": nm,
+            "from_path": to_console_path(r[4]),
+            "to_path": to_console_path(r[5]),
+            "from_rate": r[6],
+            # "AUTO-DETECTED" for system-detected moves, else the recommendation verdict
+            "source": "auto" if (r[7] or "") == "AUTO-DETECTED" else "manual",
+        })
+        if len(result) >= limit:
+            break
+
+    return result
+
+
+
+# The ONLY low-density process paths are the two single-OP console paths.
+# Matching is exact (case-insensitive) so HOV NonCon, the FCLM bucket, etc.
+# are NOT counted as low-density.
+LOW_DENSITY_PATHS = {"PPSingleOPBOD", "PPSingleOPNonCon"}
+
+
+def _is_bod(path):
+    return (path or "").strip().upper() == "PPSINGLEOPBOD"
+
+
+def _is_noncon(path):
+    return (path or "").strip().upper() == "PPSINGLEOPNONCON"
+
+
+def _is_low_density(path):
+    return _is_bod(path) or _is_noncon(path)
+
+
+def _parse_ts(ts):
+    """Parse a stored 'YYYY-MM-DD HH:MM:SS' timestamp; return datetime or None."""
+    if not ts:
+        return None
+    try:
+        return datetime.strptime(ts.replace("T", " ")[:19], "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def export_moves_csv(start=None, end=None, login=None):
+    """
+    Build an end-of-shift CSV report of picker path moves.
+
+    One row per picker (login), summarizing moves within the [start, end] window:
+        Login
+        Total Moves
+        Moves To BOD
+        Moves To NonCon
+        Moves To Low-Density (BOD + NonCon combined)
+        Distinct Paths Worked
+        Path Durations         e.g. "PPSingleOP: 42m; PPSingleOPVNA: 18m; ..."
+        Longest Path (min)
+        First Move / Last Move timestamps
+
+    Duration logic: a picker's move at time T means they LEFT from_path at T, so
+    the time spent in from_path = T minus when they entered it (the previous
+    move's time, or the window start for the first segment). The final/current
+    path runs from its entry time to the window end (or now, if end is in the
+    future / unset).
+
+    Args:
+        start, end: optional window bounds ("YYYY-MM-DD HH:MM[:SS]" or ISO).
+        login: optional single-login filter.
+
+    Returns:
+        CSV text (str).
+    """
+    import csv
+    import io
+
+    # Pull all moves in the window (newest-first from get_recent_moves).
+    moves = get_recent_moves(login=login, start=start, end=end, limit=1000)
+
+    # Window bounds as datetimes for duration math.
+    start_dt = _parse_ts(start.replace("T", " ") if start else None) if start else None
+    end_dt = _parse_ts(end.replace("T", " ") if end else None) if end else None
+    now = datetime.now()
+    # If end is unset or in the future, cap "current path" duration at now.
+    effective_end = end_dt if (end_dt and end_dt <= now) else now
+    # Safety cap for any single path segment (minutes). Prevents stale data or an
+    # unbounded (all-time) export from producing multi-day durations. One shift
+    # is well under this, so real shift reports are never affected.
+    MAX_SEGMENT_MIN = 24 * 60
+
+    # Group by login (fall back to employee_id), oldest-first for duration math.
+    by_login = {}
+    for m in moves:
+        who = m.get("login") or m.get("employee_id") or "(unknown)"
+        by_login.setdefault(who, []).append(m)
+    for who in by_login:
+        by_login[who].sort(key=lambda x: x.get("timestamp") or "")
+
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow([
+        "Login", "Total Moves", "Moves To BOD", "Moves To NonCon",
+        "Moves To Low-Density (BOD+NonCon)", "Distinct Paths Worked",
+        "Path Durations (minutes)", "Longest Path (min)",
+        "First Move", "Last Move",
+    ])
+
+    for who in sorted(by_login.keys()):
+        picker_moves = by_login[who]
+        total = len(picker_moves)
+        to_bod = sum(1 for m in picker_moves if _is_bod(m.get("to_path")))
+        to_noncon = sum(1 for m in picker_moves if _is_noncon(m.get("to_path")))
+        to_low = sum(1 for m in picker_moves if _is_low_density(m.get("to_path")))
+
+        # Build path->minutes durations from consecutive move timestamps.
+        durations = {}  # path -> total minutes
+        prev_entry = start_dt  # when they entered the first from_path (window start if known)
+        for m in picker_moves:
+            t = _parse_ts(m.get("timestamp"))
+            from_path = m.get("from_path") or "(unknown)"
+            if t and prev_entry and t >= prev_entry:
+                mins = (t - prev_entry).total_seconds() / 60.0
+                if mins > MAX_SEGMENT_MIN:
+                    mins = MAX_SEGMENT_MIN
+                durations[from_path] = durations.get(from_path, 0.0) + mins
+            # After this move they entered to_path at time t
+            prev_entry = t
+        # Final/current path: from last move time to effective_end
+        if picker_moves:
+            last_to = picker_moves[-1].get("to_path") or "(unknown)"
+            last_t = _parse_ts(picker_moves[-1].get("timestamp"))
+            if last_t and effective_end >= last_t:
+                mins = (effective_end - last_t).total_seconds() / 60.0
+                if mins > MAX_SEGMENT_MIN:
+                    mins = MAX_SEGMENT_MIN
+                durations[last_to] = durations.get(last_to, 0.0) + mins
+
+        distinct_paths = len(durations)
+        dur_str = "; ".join(f"{p}: {round(mn)}m" for p, mn in sorted(durations.items(), key=lambda x: -x[1]))
+        longest = round(max(durations.values())) if durations else 0
+
+        first_move = picker_moves[0].get("timestamp", "") if picker_moves else ""
+        last_move = picker_moves[-1].get("timestamp", "") if picker_moves else ""
+
+        writer.writerow([
+            who, total, to_bod, to_noncon, to_low, distinct_paths,
+            dur_str, longest, first_move, last_move,
+        ])
+
+    return out.getvalue()

@@ -35,7 +35,7 @@ from fclm_rate_puller import (
 )
 from cross_training import parse_cross_training, get_cross_training_summary, DEPT_COLORS
 from rate_history import record_shift_data, purge_old_data, get_associate_history, get_associate_path_averages, recommend_move, get_all_history_summary
-from learning_engine import log_move_decision, auto_track_outcomes, auto_detect_moves, enhance_recommendation, get_learning_summary
+from learning_engine import log_move_decision, auto_track_outcomes, auto_detect_moves, enhance_recommendation, get_learning_summary, get_recent_moves, detect_console_moves, export_moves_csv
 
 # Configure logging
 logging.basicConfig(
@@ -60,6 +60,26 @@ FUNCTION_ID_TO_PATH = {
     "4300002523": "RF Pick Singles",
     "4300000707": "Giftwrap Picking",
 }
+
+
+def _norm_name(name):
+    """
+    Normalize an associate name to a stable join key.
+
+    FCLM reports names as "Last,First" and the Picking Console workforce feed
+    uses the same convention. We lowercase, strip whitespace around the comma,
+    and collapse internal spaces so minor formatting differences still match.
+    Used ONLY to bridge employee_id <-> login internally; never displayed.
+    """
+    if not name:
+        return ""
+    n = name.strip().lower()
+    # Normalize "Last, First" / "Last ,First" -> "last,first"
+    parts = [p.strip() for p in n.split(",")]
+    n = ",".join(parts)
+    # Collapse repeated whitespace
+    n = " ".join(n.split())
+    return n
 
 
 # ============================================================
@@ -243,6 +263,7 @@ class DataManager:
         self._cached_permissions = {}  # employee_id -> permissions (refreshed in background)
         self.active_workforce = {}  # process_path -> list of active logins (from Tampermonkey)
         self.workforce_updated = None
+        self.name_to_login = {}  # normalized AA name -> login (from Picking Console feed)
         
         # Load cross-training data (filtered to current shift)
         self.cross_training, self.shift_info = parse_cross_training()
@@ -312,11 +333,11 @@ class DataManager:
             # Record historical data and purge old entries
             if self.current_data.get("associates_by_path"):
                 record_shift_data(self.current_data["associates_by_path"])
-                auto_detect_moves(
-                    self.current_data["associates_by_path"],
-                    self.eval_config.get("rate_expectations", {}),
-                    self.eval_config.get("default_rate_expectation", 5)
-                )
+                # NOTE: Path-move detection now runs off the Picking Console feed
+                # (see detect_console_moves in _handle_update_workforce), which
+                # provides the login and exact console processPath directly.
+                # FCLM-based move detection is intentionally disabled to avoid
+                # duplicate/competing entries.
                 auto_track_outcomes(self.current_data["associates_by_path"])
                 purge_old_data()
                 # Refresh permissions in background (non-blocking)
@@ -417,22 +438,28 @@ class DataManager:
         if self.raw_html:
             associates_by_path = parse_individual_associates(self.raw_html)
         
-        # Enrich associates with login from cross-training CSV reverse map
-        # Build employee_id -> login reverse map from CSV + workforce bridge
+        # Enrich associates with login. Sources, in priority order:
+        #   1. Cross-training CSV reverse map (employee_id -> login)
+        #   2. Persisted employee_login_map (Picking Console bridge)
+        #   3. Live name bridge from the current workforce feed (name -> login)
         login_to_eid = self.shift_info.get("login_to_employee_id", {})
         eid_to_login = {v: k for k, v in login_to_eid.items()}
-        
-        # Also build login lookup from active workforce (Tampermonkey provides logins directly)
-        # workforce: {path: [logins]} - match by checking if associate name appears in workforce
-        
+
+        try:
+            from learning_engine import get_employee_login_map
+            persisted_map = get_employee_login_map()
+        except Exception:
+            persisted_map = {}
+
+        name_to_login = getattr(self, "name_to_login", {}) or {}
+
         for path_name, assocs in associates_by_path.items():
             for a in assocs:
                 eid = a.get("employee_id", "")
-                login = eid_to_login.get(eid, "")
+                login = eid_to_login.get(eid, "") or persisted_map.get(eid, "")
                 if not login:
-                    # Try matching from workforce data by checking active list
-                    wf_logins = self.active_workforce.get(path_name, [])
-                    # Can't match by name easily, so just leave empty - workforce bridge handles it
+                    # Bridge on normalized AA name from the Picking Console feed
+                    login = name_to_login.get(_norm_name(a.get("name", "")), "")
                 a["login"] = login
         
         # Use cached permissions (populated by background thread)
@@ -459,6 +486,39 @@ class DataManager:
     def get_data(self):
         """Get the current cached data."""
         return self.current_data
+
+    def bridge_employee_logins(self):
+        """
+        Resolve employee_id -> login using the Picking Console workforce feed.
+
+        FCLM gives us (employee_id, name); the console feed gives us
+        (login, name). We join on the normalized name to produce
+        employee_id -> login, then persist it so the move log and any other
+        consumer can show the login for associates the Certificate CSV missed.
+
+        The AA name is used only as the internal join key and is never shown.
+        """
+        if not self.name_to_login or not self.current_data:
+            return 0
+
+        abp = self.current_data.get("associates_by_path", {})
+        mapping = {}
+        for assocs in abp.values():
+            for a in assocs:
+                eid = a.get("employee_id", "")
+                nm = a.get("name", "")
+                if not eid or not nm:
+                    continue
+                login = self.name_to_login.get(_norm_name(nm))
+                if login:
+                    mapping[eid] = login
+
+        if mapping:
+            from learning_engine import upsert_employee_logins
+            n = upsert_employee_logins(mapping)
+            logger.info("Login bridge: mapped %d employee_ids to logins (from Picking Console)", len(mapping))
+            return n
+        return 0
 
 
 # ============================================================
@@ -551,6 +611,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._handle_status()
         elif path.startswith("/api/history"):
             self._handle_history()
+        elif path == "/api/move-log":
+            self._handle_move_log()
+        elif path == "/api/move-log/export":
+            self._handle_move_log_export()
         # Static file serving
         elif path == "/" or path == "/index.html":
             self._serve_file("staffing_dashboard.html", "text/html")
@@ -785,6 +849,79 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "path_averages": averages,
         }).encode())
     
+    def _handle_move_log(self):
+        """
+        Return the picker path-move data log.
+
+        Query params (all optional):
+            login       - filter to a single picker's login (case-insensitive)
+            employee_id - filter by employee id
+            hours       - only moves within the last N hours
+            start/end   - only moves within a datetime window (shift window)
+            limit       - max rows (default 200)
+        """
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        login = params.get("login", [None])[0]
+        employee_id = params.get("employee_id", [None])[0]
+        hours = params.get("hours", [None])[0]
+        limit = params.get("limit", [200])[0]
+        start = params.get("start", [None])[0]
+        end = params.get("end", [None])[0]
+
+        try:
+            hours = float(hours) if hours else None
+        except ValueError:
+            hours = None
+        try:
+            limit = int(limit)
+        except (TypeError, ValueError):
+            limit = 200
+
+        try:
+            moves = get_recent_moves(login=login, employee_id=employee_id,
+                                     hours=hours, limit=limit, start=start, end=end)
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps({
+                "success": True,
+                "login": login,
+                "count": len(moves),
+                "moves": moves,
+            }).encode())
+        except Exception as e:
+            logger.error("move-log error: %s", e)
+            self._set_headers("application/json", 500)
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
+    
+    def _handle_move_log_export(self):
+        """
+        Download the end-of-shift move report as a CSV file.
+
+        Query params (all optional): login, start, end (same window semantics
+        as /api/move-log). Returns text/csv with a Content-Disposition so the
+        browser saves it.
+        """
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        login = params.get("login", [None])[0]
+        start = params.get("start", [None])[0]
+        end = params.get("end", [None])[0]
+
+        try:
+            csv_text = export_moves_csv(start=start, end=end, login=login)
+            fname = "pick_move_report_" + datetime.now().strftime("%Y%m%d_%H%M") + ".csv"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/csv; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(csv_text.encode("utf-8"))
+        except Exception as e:
+            logger.error("move-log export error: %s", e)
+            self._set_headers("application/json", 500)
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
+    
     def _handle_recommend_move(self):
         """Get a move recommendation for an associate, enhanced with learning."""
         content_length = int(self.headers.get("Content-Length", 0))
@@ -871,21 +1008,49 @@ class DashboardHandler(BaseHTTPRequestHandler):
             
             # Build picker set: { fclm_path: list of logins } - only known pick paths
             active_by_path = {}
+            # Bridge map: normalized AA name -> login. The Picking Console feed is
+            # the only place that carries the login, and it also carries the AA's
+            # name in the same "Last,First" format FCLM uses. We use the name ONLY
+            # as an internal join key to resolve employee_id -> login; the name is
+            # never displayed.
+            name_to_login = {}
             for p in pickers:
+                login = p.get("userId") or p.get("login", "")
+                nm = p.get("name", "")
+                if login and nm:
+                    name_to_login[_norm_name(nm)] = login
+
                 pp_raw = p.get("processPath", "")
                 if pp_raw in EXCLUDE_PATHS or pp_raw.startswith('PPTrans') or pp_raw.startswith('PPQA'):
                     continue
                 pp = PATH_MAP.get(pp_raw)  # Only include if mapped
                 if not pp:
                     continue  # Skip unmapped paths
-                login = p.get("userId") or p.get("login", "")
                 if pp and login:
                     if pp not in active_by_path:
                         active_by_path[pp] = []
                     active_by_path[pp].append(login)
-            
+
             data_manager.active_workforce = active_by_path
+            data_manager.name_to_login = name_to_login
             data_manager.workforce_updated = datetime.now()
+
+            # Detect path moves directly from the Picking Console feed (login +
+            # exact console processPath). This is the authoritative move source.
+            try:
+                detect_console_moves(
+                    pickers,
+                    data_manager.eval_config.get("rate_expectations", {}),
+                    data_manager.eval_config.get("default_rate_expectation", 5),
+                )
+            except Exception as de:
+                logger.warning("Console move detection failed: %s", de)
+
+            # Persist the login mapping so the move log can resolve employee_id -> login
+            try:
+                data_manager.bridge_employee_logins()
+            except Exception as be:
+                logger.warning("Login bridge failed: %s", be)
             
             total_active = sum(len(v) for v in active_by_path.values())
             logger.info("Workforce updated: %d active pickers across %d paths", total_active, len(active_by_path))
