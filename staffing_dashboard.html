@@ -79,10 +79,37 @@
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
 
-        .path-metrics { display: flex; gap: 16px; margin-bottom: 12px; }
-        .pm { text-align: center; }
+        .path-metrics { display: flex; flex-wrap: wrap; gap: 10px 12px; margin-bottom: 12px; align-items: flex-start; }
+        .pm { text-align: center; min-width: 0; }
         .pm-val { font-size: 1.1rem; font-weight: 700; }
-        .pm-lbl { font-size: 0.55rem; color: #98989d; text-transform: uppercase; letter-spacing: 0.3px; }
+        .pm-lbl { font-size: 0.55rem; color: #98989d; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+        /* HC breakdown: Total / Active / Inactive — compact so it doesn't overflow the card */
+        .pm-hc { display: flex; gap: 5px; align-items: baseline; justify-content: center; }
+        .pm-hc .hc-part { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+        .pm-hc .hc-num { font-size: 1.0rem; font-weight: 700; }
+        .pm-hc .hc-num.total { color: #ffffff; }
+        .pm-hc .hc-num.active { color: #4ade80; }
+        .pm-hc .hc-num.inactive { color: #64748b; }
+        .pm-hc .hc-sub { font-size: 0.44rem; color: #98989d; text-transform: uppercase; letter-spacing: 0.2px; margin-top: 2px; white-space: nowrap; }
+        .pm-hc .hc-sep { color: #48484a; font-size: 0.8rem; font-weight: 700; align-self: center; }
+        /* Sub-path split (e.g. BOD / NonCon for Low-Density) shown under the HC cell */
+        .pm-subpaths { display: flex; gap: 8px; justify-content: center; margin-top: 4px; flex-wrap: wrap; }
+        .pm-subpaths .sp { font-size: 0.5rem; color: #98989d; text-transform: uppercase; letter-spacing: 0.2px; white-space: nowrap; }
+        .pm-subpaths .sp b { color: #cbd5e1; font-size: 0.62rem; }
+        .pm-hc-wrap { display: flex; flex-direction: column; align-items: center; }
+        /* Low-Density: NonCon + BOD as primary HC — compact one line each:
+           LABEL  T/A/I  · rate. Keeps the card the same height as the others. */
+        .pm-hc-split { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+        .pm-hc-split .sp-row { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+        .pm-hc-split .sp-name { font-size: 0.55rem; font-weight: 700; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.3px; min-width: 44px; }
+        .pm-hc-split .sp-nums { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.5px; }
+        .pm-hc-split .sp-nums b { font-weight: 700; }
+        .pm-hc-split .sp-nums .total { color: #ffffff; }
+        .pm-hc-split .sp-nums .active { color: #4ade80; }
+        .pm-hc-split .sp-nums .inactive { color: #64748b; }
+        .pm-hc-split .sp-rate { font-size: 0.62rem; font-weight: 600; color: #e2e8f0; }
+        .pm-hc-split .sp-rate::after { content: ' UPH'; color: #98989d; font-size: 0.5rem; }
+        .pm-hc-split .sp-legend { font-size: 0.42rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.3px; margin-top: 1px; }
 
         /* Progress bar */
         .progress-wrap { margin-bottom: 12px; }
@@ -367,13 +394,20 @@
         const totalHours = pathList.reduce((s,p)=>s+p.hours,0);
         const totalUPH = totalHours > 0 ? (totalUnits/totalHours).toFixed(1) : '0.0';
         const aw=data.active_workforce||{};
-        const totalActiveHC = Object.values(aw).reduce((s,v)=>s+v.length,0);
+        // Pick HC totals come straight from the Picking Console feed (source of truth).
+        const phc = data.pick_hc || null;
         document.getElementById('summary').innerHTML=`
             <div class="chip"><div class="chip-val blue">${totalPaths}</div><div class="chip-lbl">Paths</div></div>
             <div class="chip"><div class="chip-val green">${hitting}</div><div class="chip-lbl">Hitting Rate</div></div>
             <div class="chip"><div class="chip-val red">${totalPaths-hitting}</div><div class="chip-lbl">Missing Rate</div></div>
             <div class="chip"><div class="chip-val" style="color:#fff;">${totalUPH}</div><div class="chip-lbl">Pick Total UPH</div></div>
-            <div class="chip"><div class="chip-val blue">${totalActiveHC||'--'}</div><div class="chip-lbl">Pick HC</div></div>
+            <div class="chip"><div class="pm-hc" style="justify-content:flex-start;">
+                <div class="hc-part"><span class="hc-num total">${phc?phc.total:'--'}</span><span class="hc-sub">Total</span></div>
+                <span class="hc-sep">/</span>
+                <div class="hc-part"><span class="hc-num active">${phc?phc.active:'--'}</span><span class="hc-sub">Active</span></div>
+                <span class="hc-sep">/</span>
+                <div class="hc-part"><span class="hc-num inactive">${phc?phc.inactive:'--'}</span><span class="hc-sub">Inactive</span></div>
+            </div><div class="chip-lbl">Pick HC</div></div>
             <div class="chip"><div class="chip-val" style="color:#ff9500;">${getAttrition().length}</div><div class="chip-lbl">Attrition${(()=>{const a=getAttrition();if(!a.length)return '';const byTime={};a.forEach(x=>{const t=x.departing||'?';byTime[t]=(byTime[t]||0)+1;});return '<br><span style=\"font-size:0.55rem;color:#98989d;\">'+Object.entries(byTime).map(([t,c])=>c+' @ '+t).join(', ')+'</span>';})()}</div></div>
             <div class="chip" style="margin-left:auto;"><div class="chip-val" style="font-size:0.85rem;color:#98989d;">${data.timestamp||'--'}</div><div class="chip-lbl">Last Updated</div></div>
         `;
@@ -413,8 +447,9 @@
         let tabsHtml = `<div class="path-tab ${!selectedPath&&selectedPath!=='xtrain'?'active':''}" onclick="selectPath(null)">Overview</div>`;
         for(const p of pathList){
             const isActive = selectedPath === p.name;
-            const pathHC = (aw[p.name]||[]).length;
-            const hcLabel = pathHC > 0 ? pathHC : p.assocs.filter(a=>(a.paid_hours||0)>=0.05).length;
+            // Tab HC = console Total for the path (sole source of truth); '--' if no feed yet.
+            const wbpTab = (data.workforce_by_path||{})[p.name];
+            const hcLabel = wbpTab ? (wbpTab.total||[]).length : '--';
             tabsHtml += `<div class="path-tab ${isActive?'active':''} ${p.hitting?'hitting':'missing'}" onclick="selectPath('${p.name}')">${p.name}<span class="tab-rate">${hcLabel} HC</span></div>`;
         }
         tabsHtml += `<div class="path-tab ${selectedPath==='attrition'?'active':''}" onclick="selectPath('attrition')" style="border-color:#ff950050;">Attrition<span class="tab-rate">${getAttrition().length}</span></div>`;
@@ -501,7 +536,54 @@
                 <div class="path-metrics">
                     <div class="pm"><div class="pm-val ${p.hitting?'green':'red'}">${p.rate.toFixed(1)}</div><div class="pm-lbl">Current UPH</div></div>
                     <div class="pm"><div class="pm-val"><input type="number" class="goal-input" value="${p.expected}" data-path="${p.name}" onclick="event.stopPropagation()" onchange="updateGoal(this)" style="width:42px;background:#1c1c1e;border:1px solid #38383a;color:#fff;text-align:center;border-radius:3px;font-size:1.05rem;font-weight:700;padding:1px 2px;"></div><div class="pm-lbl">Goal UPH</div></div>
-                    <div class="pm"><div class="pm-val blue">${(aw[p.name]||[]).length||p.assocs.filter(a=>(a.paid_hours||0)>=0.05).length}</div><div class="pm-lbl">HC</div></div>
+                    <div class="pm">${(()=>{
+                        // Picking Console is the SOLE source of truth for headcount.
+                        //   Total    = every picker the console lists on this path
+                        //   Active   = console Status == Active
+                        //   Inactive = Total - Active
+                        // No FCLM fallback: if the console feed has not arrived,
+                        // show "--" rather than guessing from paid hours.
+                        // Friendly labels for console sub-paths (e.g. Low-Density = BOD + NonCon).
+                        const SP_LABEL = {
+                            'PPSingleOPBOD':'BOD', 'PPSingleOPNonCon':'NonCon',
+                            'PPMultiBldgWide':'BldgWide', 'PPMultiSSD':'SSD',
+                            'PPSingleSSD':'SSD', 'PPMezzPickSSD':'Mezz SSD',
+                            'PPSingleGiftwrap':'Giftwrap', 'PPSingleWrap':'Wrap', 'PPSingleMCF':'MCF',
+                            'PPHOVAuto':'HOV Auto', 'PPHOVBOD':'HOV BOD', 'PPHOVNonCon':'HOV NonCon', 'PPPalletPick':'Pallet'
+                        };
+                        const spLbl = k => SP_LABEL[k] || k.replace(/^PP/,'');
+                        const wbp = (data.workforce_by_path || {})[p.name];
+                        const hcBlock = (t,a,i)=>`<div class="pm-hc">
+                            <div class="hc-part"><span class="hc-num total">${t}</span><span class="hc-sub">Total</span></div>
+                            <span class="hc-sep">/</span>
+                            <div class="hc-part"><span class="hc-num active">${a}</span><span class="hc-sub">Active</span></div>
+                            <span class="hc-sep">/</span>
+                            <div class="hc-part"><span class="hc-num inactive">${i}</span><span class="hc-sub">Inactive</span></div>
+                        </div>`;
+                        if (!wbp) return `<div class="pm-hc-wrap">${hcBlock('--','--','--')}</div>`;
+                        // Low-Density: show NonCon and BOD as the PRIMARY breakdown,
+                        // one compact line each: LABEL  T / A / I  · rate.
+                        // Console defines the split; FCLM supplies the rate.
+                        const sp=(data.subpaths_by_path||{})[p.name];
+                        if(sp){
+                            const spr=((data.subpath_rates||{})[p.name])||{};
+                            const rows=Object.entries(sp)
+                                .sort((x,y)=>(y[1].total)-(x[1].total))
+                                .map(([k,v])=>{
+                                    const rt=spr[k];
+                                    const rate=(rt&&rt.avg_rate>0)?`<span class="sp-rate">${rt.avg_rate}</span>`:'';
+                                    return `<div class="sp-row">
+                                        <span class="sp-name">${spLbl(k)}</span>
+                                        <span class="sp-nums"><b class="total">${v.total}</b>/<b class="active">${v.active}</b>/<b class="inactive">${v.inactive}</b></span>
+                                        ${rate}
+                                    </div>`;
+                                });
+                            return `<div class="pm-hc-split">${rows.join('')}
+                                <div class="sp-legend">T / A / I &middot; UPH</div></div>`;
+                        }
+                        const total=(wbp.total||[]).length, active=(wbp.active||[]).length, inactive=(wbp.inactive||[]).length;
+                        return `<div class="pm-hc-wrap">${hcBlock(total,active,inactive)}</div>`;
+                    })()}<div class="pm-lbl">HC</div></div>
                     <div class="pm"><div class="pm-val">${p.units}</div><div class="pm-lbl">Units</div></div>
                     <div class="pm"><div class="pm-val">${p.hours.toFixed(2)}</div><div class="pm-lbl">Hours</div></div>
                 </div>
@@ -924,6 +1006,10 @@
                     const fresh=await r.json();
                     // Update all live fields
                     data.active_workforce=fresh.active_workforce||data.active_workforce;
+                    data.workforce_by_path=fresh.workforce_by_path||data.workforce_by_path;
+                    data.subpaths_by_path=fresh.subpaths_by_path||data.subpaths_by_path;
+                    data.subpath_rates=fresh.subpath_rates||data.subpath_rates;
+                    data.pick_hc=fresh.pick_hc||data.pick_hc;
                     data.xtrain_status=fresh.xtrain_status;
                     data.xtrain_count=fresh.xtrain_count;
                     data.backfill_status=fresh.backfill_status;

@@ -262,6 +262,13 @@ class DataManager:
         self.lock = threading.Lock()
         self._cached_permissions = {}  # employee_id -> permissions (refreshed in background)
         self.active_workforce = {}  # process_path -> list of active logins (from Tampermonkey)
+        # Picking Console is the SOLE source of truth for headcount.
+        # process_path -> {"total": [...], "active": [...], "inactive": [...]}
+        # (lists of logins). Populated by _handle_update_workforce.
+        self.workforce_by_path = {}
+        # fclm_path -> { console_processPath -> {"total","active","inactive"} }
+        # (lists of logins) so the UI can split collapsed buckets like Low-Density.
+        self.subpaths_by_path = {}
         self.workforce_updated = None
         self.name_to_login = {}  # normalized AA name -> login (from Picking Console feed)
         
@@ -480,8 +487,104 @@ class DataManager:
             "cross_training_by_employee_id": verified_permissions,
             "history_summary": get_all_history_summary(),
             "active_workforce": self.active_workforce,
+            "workforce_by_path": self.workforce_by_path,
+            "subpaths_by_path": self._subpath_counts(),
+            "subpath_rates": self._subpath_rates(),
+            "pick_hc": self._pick_hc_summary(),
             "eid_to_login": {v: k for k, v in self.shift_info.get("login_to_employee_id", {}).items()},
         }
+
+    def _subpath_counts(self):
+        """
+        Sub-path breakdown for OrderPickLowDensityP ONLY.
+
+        FCLM collapses PPSingleOPBOD + PPSingleOPNonCon into a single
+        OrderPickLowDensityP bucket, so the Picking Console feed is the only
+        way to tell how many pickers are on BOD vs NonCon. We surface just that
+        one path; all other FCLM buckets are left aggregated.
+
+        Returns: { "OrderPickLowDensityP": { console_processPath:
+                     {"total","active","inactive"} } }
+        """
+        LOW_DENSITY = "OrderPickLowDensityP"
+        sp_map = (self.subpaths_by_path or {}).get(LOW_DENSITY)
+        if not sp_map:
+            return {}
+        return {
+            LOW_DENSITY: {
+                sp_name: {
+                    "total": len(b.get("total", [])),
+                    "active": len(b.get("active", [])),
+                    "inactive": len(b.get("inactive", [])),
+                }
+                for sp_name, b in sp_map.items()
+            }
+        }
+
+    def _subpath_rates(self):
+        """
+        Rate stats per Low-Density sub-path (BOD vs NonCon).
+
+        The Picking Console tells us WHICH logins are on BOD vs NonCon (FCLM
+        can't — it collapses both into OrderPickLowDensityP). We then look up
+        those same logins in the FCLM associate data to get their rate/units,
+        and aggregate per sub-path.
+
+        Returns: { "OrderPickLowDensityP": { console_processPath: {
+                     "avg_rate", "pickers_with_rate", "units", "hours"} } }
+        Only logins that FCLM has a rate for are included in the averages.
+        """
+        LOW_DENSITY = "OrderPickLowDensityP"
+        sp_map = (self.subpaths_by_path or {}).get(LOW_DENSITY)
+        if not sp_map or not self.current_data:
+            return {}
+
+        # Build login -> FCLM associate (rate/units/hours) for the Low-Density bucket.
+        abp = self.current_data.get("associates_by_path", {})
+        ld_assocs = abp.get(LOW_DENSITY, [])
+        by_login = {}
+        for a in ld_assocs:
+            lg = (a.get("login") or "").strip()
+            if lg:
+                by_login[lg] = a
+
+        out = {}
+        for sp_name, buckets in sp_map.items():
+            logins = buckets.get("total", [])
+            rates, units_sum, hours_sum, n_rate = [], 0.0, 0.0, 0
+            for lg in logins:
+                a = by_login.get(lg)
+                if not a:
+                    continue
+                r = a.get("rate", 0) or 0
+                if r > 0:
+                    rates.append(r)
+                    n_rate += 1
+                units_sum += a.get("units", 0) or 0
+                hours_sum += a.get("paid_hours", 0) or 0
+            out[sp_name] = {
+                "avg_rate": round(sum(rates) / len(rates), 1) if rates else 0.0,
+                "pickers_with_rate": n_rate,
+                "units": int(units_sum),
+                "hours": round(hours_sum, 2),
+            }
+        return {LOW_DENSITY: out}
+
+    def _pick_hc_summary(self):
+        """
+        Aggregate Pick headcount across all paths from the Picking Console feed
+        (the sole source of truth). Returns {"total", "active", "inactive"}.
+        Logins are de-duplicated across paths so a picker counted once overall.
+        """
+        wbp = self.workforce_by_path or {}
+        total, active, inactive = set(), set(), set()
+        for buckets in wbp.values():
+            total.update(buckets.get("total", []))
+            active.update(buckets.get("active", []))
+            inactive.update(buckets.get("inactive", []))
+        # A login active on any path counts as active overall.
+        inactive -= active
+        return {"total": len(total), "active": len(active), "inactive": len(inactive)}
     
     def get_data(self):
         """Get the current cached data."""
@@ -658,8 +761,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
         current = data_manager.get_data()
         if current:
             try:
-                # Always inject latest workforce data
+                # Always inject latest workforce data (Picking Console = source of truth for HC)
                 current["active_workforce"] = data_manager.active_workforce
+                current["workforce_by_path"] = data_manager.workforce_by_path
+                current["subpaths_by_path"] = data_manager._subpath_counts()
+                current["subpath_rates"] = data_manager._subpath_rates()
+                current["pick_hc"] = data_manager._pick_hc_summary()
                 # Add permissions loading status
                 current["xtrain_status"] = "ready" if len(data_manager._cached_permissions) > 0 else "loading"
                 current["xtrain_count"] = len(data_manager._cached_permissions)
@@ -1006,14 +1113,42 @@ class DashboardHandler(BaseHTTPRequestHandler):
             # Paths to exclude (not pick paths)
             EXCLUDE_PATHS = {'PPTrans', 'PPQA', 'PPTransOut', 'PPTransIn', 'PPICQA', 'PPCount', 'PPRebinHotpick', 'PPRebin'}
             
-            # Build picker set: { fclm_path: list of logins } - only known pick paths
+            # Build picker sets from the Picking Console feed — the SOLE source
+            # of truth for headcount. For each mapped pick path we track three
+            # buckets of logins:
+            #   total    = every picker the console lists on that path
+            #   active   = console Status == "Active"
+            #   inactive = total - active (any non-Active console status)
+            # active_by_path (logins with Active status) is kept for backward
+            # compatibility with the associate-table "CURRENTLY PICKING" filter.
             active_by_path = {}
+            workforce_by_path = {}
+            # Sub-path breakdown: fclm_path -> { console_processPath -> {total,active,inactive} }
+            # Lets the UI split a collapsed FCLM bucket (e.g. OrderPickLowDensityP)
+            # back into its console paths (PPSingleOPBOD vs PPSingleOPNonCon).
+            subpaths_by_path = {}
             # Bridge map: normalized AA name -> login. The Picking Console feed is
             # the only place that carries the login, and it also carries the AA's
             # name in the same "Last,First" format FCLM uses. We use the name ONLY
             # as an internal join key to resolve employee_id -> login; the name is
             # never displayed.
             name_to_login = {}
+
+            def _is_active(picker):
+                """Interpret the console status. Accepts a 'status' string
+                (e.g. 'Active') or a boolean 'active' flag. Anything that isn't
+                explicitly Active/true is treated as inactive."""
+                st = picker.get("status")
+                if isinstance(st, str) and st.strip():
+                    return st.strip().lower() == "active"
+                act = picker.get("active")
+                if isinstance(act, bool):
+                    return act
+                if isinstance(act, str):
+                    return act.strip().lower() in ("active", "true", "1", "yes")
+                # No status info at all: assume active (feed only sent active rows)
+                return True
+
             for p in pickers:
                 login = p.get("userId") or p.get("login", "")
                 nm = p.get("name", "")
@@ -1024,14 +1159,44 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 if pp_raw in EXCLUDE_PATHS or pp_raw.startswith('PPTrans') or pp_raw.startswith('PPQA'):
                     continue
                 pp = PATH_MAP.get(pp_raw)  # Only include if mapped
-                if not pp:
-                    continue  # Skip unmapped paths
-                if pp and login:
-                    if pp not in active_by_path:
-                        active_by_path[pp] = []
-                    active_by_path[pp].append(login)
+                if not pp or not login:
+                    continue  # Skip unmapped paths / missing login
+
+                buckets = workforce_by_path.setdefault(
+                    pp, {"total": [], "active": [], "inactive": []}
+                )
+                # Sub-path bucket keyed by the raw console processPath.
+                sp_map = subpaths_by_path.setdefault(pp, {})
+                sp = sp_map.setdefault(pp_raw, {"total": [], "active": [], "inactive": []})
+                if login not in buckets["total"]:
+                    buckets["total"].append(login)
+                if login not in sp["total"]:
+                    sp["total"].append(login)
+                if _is_active(p):
+                    if login not in buckets["active"]:
+                        buckets["active"].append(login)
+                    if login not in sp["active"]:
+                        sp["active"].append(login)
+                    active_by_path.setdefault(pp, [])
+                    if login not in active_by_path[pp]:
+                        active_by_path[pp].append(login)
+                else:
+                    if login not in buckets["inactive"]:
+                        buckets["inactive"].append(login)
+                    if login not in sp["inactive"]:
+                        sp["inactive"].append(login)
+
+            # A login can appear as both active and inactive across duplicate rows;
+            # active wins, so scrub it from inactive (both path- and sub-path level).
+            for pp, buckets in workforce_by_path.items():
+                buckets["inactive"] = [l for l in buckets["inactive"] if l not in buckets["active"]]
+            for pp, sp_map in subpaths_by_path.items():
+                for sp_name, sp in sp_map.items():
+                    sp["inactive"] = [l for l in sp["inactive"] if l not in sp["active"]]
 
             data_manager.active_workforce = active_by_path
+            data_manager.workforce_by_path = workforce_by_path
+            data_manager.subpaths_by_path = subpaths_by_path
             data_manager.name_to_login = name_to_login
             data_manager.workforce_updated = datetime.now()
 
@@ -1052,11 +1217,20 @@ class DashboardHandler(BaseHTTPRequestHandler):
             except Exception as be:
                 logger.warning("Login bridge failed: %s", be)
             
-            total_active = sum(len(v) for v in active_by_path.values())
-            logger.info("Workforce updated: %d active pickers across %d paths", total_active, len(active_by_path))
-            
+            hc = data_manager._pick_hc_summary()
+            logger.info(
+                "Workforce updated (console SoT): total=%d active=%d inactive=%d across %d paths",
+                hc["total"], hc["active"], hc["inactive"], len(workforce_by_path)
+            )
+
             self._set_headers("application/json")
-            self.wfile.write(json.dumps({"success": True, "active_count": total_active}).encode())
+            self.wfile.write(json.dumps({
+                "success": True,
+                "total_hc": hc["total"],
+                "active_hc": hc["active"],
+                "inactive_hc": hc["inactive"],
+                "active_count": hc["active"],  # backward-compatible field
+            }).encode())
         except Exception as e:
             self._set_headers("application/json", 500)
             self.wfile.write(json.dumps({"error": str(e)}).encode())

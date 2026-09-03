@@ -18,6 +18,7 @@ UPDATE_FILES = [
     "version.txt",
     "updater.py",
     "Start Dashboard.bat",
+    "CHANGELOG.md",
 ]
 
 def get_version_remote():

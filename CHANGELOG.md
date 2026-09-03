@@ -3,6 +3,43 @@
 All notable changes to PickMatrix (HOU8 Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.0.0] — Picking Console is now the source of truth for Headcount
+
+**Headline: HC now comes straight from the Picking Console workforce feed.**
+No more guessing headcount from FCLM paid hours — every path shows a real
+Total / Active / Inactive breakdown driven by the live console roster.
+
+### Added
+- **Total / Active / Inactive HC per path.** Each path card now shows three
+  numbers instead of one:
+  - **Total** — every picker the Picking Console lists on that path.
+  - **Active** — pickers whose console status is Active.
+  - **Inactive** — on the path but not currently active.
+  The top-bar "Pick HC" chip shows the same three numbers site-wide
+  (logins de-duplicated across paths).
+- **Low-Density BOD vs NonCon breakdown.** FCLM collapses `PPSingleOPBOD` and
+  `PPSingleOPNonCon` into one `OrderPickLowDensityP` bucket. The
+  OrderPickLowDensityP card now shows **BOD** and **NonCon** as the primary HC
+  view — the Picking Console identifies who's on each sub-path, and FCLM
+  supplies each sub-path's average rate (UPH).
+
+### Changed
+- Headcount no longer falls back to FCLM `paid_hours`. If the Picking Console
+  feed hasn't arrived yet, HC shows `--` instead of an estimate.
+- Live HC polling (every 30s) refreshes the full Total/Active/Inactive
+  breakdown and the Low-Density BOD/NonCon split.
+- Path tabs and the summary chip use the console counts.
+
+### Fixed
+- Path-card metric row no longer overflows past the card edge with the wider
+  HC display; the Low-Density card stays the same height as the others.
+
+### Requirements
+- **Requires OB Pick Center Tampermonkey v3.5+** (v3.6+ recommended), which
+  pushes the full workforce roster (every picker + active/inactive status) to
+  PickMatrix. On older script versions, HC stays blank (`--`). Keep Rodeo /
+  Picking Console open in the browser as before.
+
 ## [1.9.2] — 2026-08-30
 
 ### Added — Path Move Log (Overview tab)
