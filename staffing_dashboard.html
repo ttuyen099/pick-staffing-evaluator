@@ -958,7 +958,10 @@
         const pfc=pf(a.rate||0,p.expected,tol);
         const ct=ctMap[a.employee_id]||[];
         const dots=ct.map(d=>`<span class="ct-d ${DC[d]||''}" title="${d}"></span>`).join('');
-        const login=a.login||a.employee_id||'';
+        // Resolve login: prefer the associate's own login, then the live
+        // eid_to_login map (FCLM roster + console bridge), then employee_id.
+        const eidMap=data.eid_to_login||{};
+        const login=a.login||eidMap[a.employee_id]||a.employee_id||'';
         const histInfo=data.history_summary&&data.history_summary[a.employee_id]?data.history_summary[a.employee_id]:null;
         const histDays=histInfo?histInfo.days_active:0;
         // Tooltip

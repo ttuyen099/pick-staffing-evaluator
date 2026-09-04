@@ -3,6 +3,15 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.2.1] — Login display fix
+
+### Fixed
+- **Associate tables and X-Train show real logins instead of employee IDs.**
+  The associate row now falls back to the live `eid_to_login` map (FCLM roster
+  + Picking Console bridge) when the associate's own login field hasn't been
+  populated yet, so logins appear as soon as the roster resolves — no waiting
+  for the next full FCLM fetch.
+
 ## [2.2.0] — More sites
 
 ### Added
