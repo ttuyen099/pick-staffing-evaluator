@@ -1,0 +1,16 @@
+# PII / associate data — never commit
+Certificate-tracking*.csv
+rate_history*.db
+rate_history*.db-*
+
+# Local runtime artifacts / debug dumps
+last_response_debug*.html
+last_eos_response_debug*.html
+*.pyc
+__pycache__/
+
+# Local site selection (per-machine)
+site.txt
+
+# Secrets: config.yaml holds a per-user Slack webhook + local settings.
+# The tracked copy is a sanitized template; do not commit real webhooks.
