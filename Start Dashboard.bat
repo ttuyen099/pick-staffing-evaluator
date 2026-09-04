@@ -76,8 +76,16 @@ if %errorlevel% neq 0 (
 :: than the local version, so a newer local build is never overwritten.
 echo   Checking for updates...
 "%PYTHON%" -c "import requests,base64;r=requests.get('https://api.github.com/repos/ttuyen099/pick-staffing-evaluator/contents/version.txt',timeout=5);remote=base64.b64decode(r.json()['content']).decode().strip();local=open('version.txt').read().strip();rt=tuple(int(x) for x in remote.split('.'));lt=tuple(int(x) for x in local.split('.'));exit(1 if rt>lt else 0)" >nul 2>&1
-if %errorlevel% neq 0 (
+set "NEEDUPDATE=%errorlevel%"
+:: Self-heal: if the per-site configs folder is missing, force an update so
+:: users get their site in the dropdown even when the version already matches.
+if not exist "sites\HOU8.yaml" set "NEEDUPDATE=1"
+if "%NEEDUPDATE%" neq "0" (
     echo   Update found! Downloading...
+    "%PYTHON%" updater.py
+    :: Run again so a freshly-downloaded updater.py applies its OWN (newer) file
+    :: list in the same session — this is how the sites\ folder reaches users who
+    :: were on an older updater that didn't know about per-site configs yet.
     "%PYTHON%" updater.py
     echo   Updated!
 )

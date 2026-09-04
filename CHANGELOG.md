@@ -3,6 +3,16 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.4.2] — Reliable per-site config delivery
+
+### Fixed
+- **The sites/ folder now reliably reaches users on update.** Previously, a user
+  updating from an older `updater.py` ran the old file list (which predated
+  per-site configs), so the sites folder arrived a cycle late or not at all.
+  `Start Dashboard.bat` now runs the updater twice (so a freshly-downloaded
+  updater applies its own newer file list in the same session) and force-updates
+  if the sites folder is missing — so everyone gets their site in the dropdown.
+
 ## [2.4.1] — Cleaner tab title
 
 ### Changed
