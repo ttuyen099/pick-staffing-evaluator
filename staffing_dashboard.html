@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PickMatrix - HOU8</title>
+    <title>PickMatrix</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #000000; color: #ffffff; min-height: 100vh; }
@@ -452,7 +452,7 @@
         const wh = data.warehouse_id || '';
         const badge = document.getElementById('siteBadge');
         if (badge) badge.textContent = wh;
-        if (wh) document.title = 'PickMatrix - ' + wh;
+        // Tab title stays "PickMatrix" (the site is shown in the header badge/dropdown).
         loadGoalsForSite(wh);
         _attritionSite = (wh || '').toUpperCase();
         // Warn if the OB Pick Center add-on is pushing a different FC's workforce.

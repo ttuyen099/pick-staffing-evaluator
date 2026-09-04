@@ -3,6 +3,12 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.4.1] — Cleaner tab title
+
+### Changed
+- Browser tab title is now just "PickMatrix" (no site code). The active site
+  is still shown in the header badge and Site dropdown.
+
 ## [2.4.0] — 4 more sites
 
 ### Added
