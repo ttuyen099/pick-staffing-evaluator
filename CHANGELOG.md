@@ -3,6 +3,12 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.4.0] — 4 more sites
+
+### Added
+- **MEX6, MEX2, BJX1, PHX7** (19 sites total). Health-checked: FCLM paths load
+  and the employee roster resolves logins (100% associate→login match on all).
+
 ## [2.3.0] — 2 more sites
 
 ### Added
