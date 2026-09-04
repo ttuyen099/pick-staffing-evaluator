@@ -19,6 +19,7 @@ UPDATE_FILES = [
     "version.txt",
     "updater.py",
     "Start Dashboard.bat",
+    "README.txt",
     "CHANGELOG.md",
     "sites/HOU8.yaml",
     "sites/CLT3.yaml",

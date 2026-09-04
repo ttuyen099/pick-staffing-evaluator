@@ -3,6 +3,14 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.4.3] — Updated README (required tabs) now ships to users
+
+### Changed
+- README rewritten for the current multi-site build and now added to the
+  auto-update file list (it was previously never pushed, so users had the old
+  v1.8 README). Adds a clear "Keep these tabs open" section: your site's Rodeo
+  ExSD page (drives everything), Picking Console (HC source), and FCLM.
+
 ## [2.4.2] — Reliable per-site config delivery
 
 ### Fixed
