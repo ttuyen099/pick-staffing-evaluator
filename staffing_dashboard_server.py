@@ -27,6 +27,49 @@ from bs4 import BeautifulSoup
 
 # Add directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# ============================================================
+# Multi-site selection (must run BEFORE importing DB-backed modules,
+# because rate_history/learning_engine resolve their per-site DB path
+# from the PICKMATRIX_SITE env var at import time).
+# ============================================================
+
+def _resolve_site():
+    """
+    Determine the active site (warehouse). Priority:
+      1. --site=XXX  command-line argument
+      2. PICKMATRIX_SITE environment variable
+      3. site.txt file in the script directory
+      4. None (single-site / default HOU8 behavior)
+    Returns the uppercased site code, or "" if none selected.
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # 1. CLI arg
+    for arg in sys.argv[1:]:
+        if arg.startswith("--site="):
+            return arg.split("=", 1)[1].strip().upper()
+    # 2. env var
+    env_site = (os.environ.get("PICKMATRIX_SITE") or "").strip().upper()
+    if env_site:
+        return env_site
+    # 3. site.txt
+    site_file = os.path.join(script_dir, "site.txt")
+    if os.path.exists(site_file):
+        try:
+            with open(site_file, "r") as f:
+                s = f.read().strip().upper()
+                if s:
+                    return s
+        except OSError:
+            pass
+    return ""
+
+
+# Resolve and publish the site BEFORE the DB modules import.
+_ACTIVE_SITE = _resolve_site()
+if _ACTIVE_SITE:
+    os.environ["PICKMATRIX_SITE"] = _ACTIVE_SITE
+
 from fclm_rate_puller import (
     load_config,
     get_midway_cookies,
@@ -232,17 +275,57 @@ def parse_individual_associates(html_content):
 def load_all_config():
     """Load both main config and staffing config."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    
+
     config_path = os.path.join(script_dir, "config.yaml")
     config = load_config(config_path)
-    
+
     eval_config_path = os.path.join(script_dir, "staffing_config.yaml")
     try:
         with open(eval_config_path, "r") as f:
-            eval_config = yaml.safe_load(f)
+            eval_config = yaml.safe_load(f) or {}
     except FileNotFoundError:
         eval_config = {}
-    
+
+    # ---- Multi-site overrides ----
+    # If a site is active, load sites/<SITE>.yaml and overlay it. A site file may
+    # contain any of: warehouse_id, process_id (auth-level, override config), plus
+    # process_paths / rate_expectations / dashboard / staffing_evaluator (eval-level).
+    # Anything omitted falls back to the base config files above.
+    site = (os.environ.get("PICKMATRIX_SITE") or "").strip().upper()
+    if site:
+        site_path = os.path.join(script_dir, "sites", f"{site}.yaml")
+        if os.path.exists(site_path):
+            try:
+                with open(site_path, "r") as f:
+                    site_cfg = yaml.safe_load(f) or {}
+            except (OSError, yaml.YAMLError) as e:
+                logger.error("Failed to read site config %s: %s", site_path, e)
+                site_cfg = {}
+
+            # Auth-level keys go onto `config`
+            for k in ("warehouse_id", "process_id", "primary_attribute",
+                      "secondary_attribute", "node_type", "end_of_shift"):
+                if k in site_cfg:
+                    config[k] = site_cfg[k]
+
+            # Eval-level keys go onto `eval_config`
+            for k in ("process_paths", "rate_expectations", "default_rate_expectation",
+                      "dashboard", "staffing_evaluator"):
+                if k in site_cfg:
+                    eval_config[k] = site_cfg[k]
+
+            logger.info("Loaded site override: %s (warehouse_id=%s)",
+                        site, config.get("warehouse_id"))
+        else:
+            # No site file: at least force the warehouse_id so FCLM/permissions
+            # point at the right FC even without per-site path goals.
+            config["warehouse_id"] = site
+            logger.warning(
+                "Site '%s' selected but sites/%s.yaml not found — using warehouse_id=%s "
+                "with default paths/goals. Paths will still auto-discover from FCLM.",
+                site, site, site
+            )
+
     return config, eval_config
 
 
@@ -260,7 +343,17 @@ class DataManager:
         self.last_fetch_time = None
         self.raw_html = None  # Store raw HTML for associate parsing
         self.lock = threading.Lock()
-        self._cached_permissions = {}  # employee_id -> permissions (refreshed in background)
+        self._cached_permissions = {}  # identifier -> permissions (refreshed in background)
+        # Every identifier we've ATTEMPTED to verify (even if it returned no
+        # permissions), so we don't re-check the same people every 30s push.
+        self._perms_attempted = set()
+        # Single-flight guard: only one permission-verification thread at a time.
+        self._perms_verifying = False
+        self._perms_lock = threading.Lock()
+        # Login lookup (FCLM timeDetails) attempt tracking + single-flight guard.
+        self._login_attempted = set()
+        self._login_resolving = False
+        self._login_lock = threading.Lock()
         self.active_workforce = {}  # process_path -> list of active logins (from Tampermonkey)
         # Picking Console is the SOLE source of truth for headcount.
         # process_path -> {"total": [...], "active": [...], "inactive": [...]}
@@ -269,16 +362,22 @@ class DataManager:
         # fclm_path -> { console_processPath -> {"total","active","inactive"} }
         # (lists of logins) so the UI can split collapsed buckets like Low-Density.
         self.subpaths_by_path = {}
+        # Set to the wrong FC string when a workforce push is rejected for FC
+        # mismatch, so the dashboard can warn the user. None = no mismatch.
+        self.workforce_fc_mismatch = None
         self.workforce_updated = None
         self.name_to_login = {}  # normalized AA name -> login (from Picking Console feed)
         
-        # Load cross-training data (filtered to current shift)
-        self.cross_training, self.shift_info = parse_cross_training()
-        self.cross_training_summary = get_cross_training_summary(self.cross_training)
-        
-        # Employee ID -> cross-training departments mapping
-        self.employee_id_map = self.shift_info.get("employee_id_map", {})
-        
+        # Cross-training is sourced SOLELY from live FCLM permissions
+        # (batch_check_fclm_permissions), which are per-warehouse and always
+        # site-correct. The Certificate-tracking CSV is NOT used.
+        # These fields are kept empty for backward compatibility with any code
+        # that references them.
+        self.cross_training = {}
+        self.shift_info = {"filtered": False, "employee_id_map": {}, "login_to_employee_id": {}}
+        self.cross_training_summary = {"associates": {}, "department_counts": {}, "department_colors": DEPT_COLORS}
+        self.employee_id_map = {}
+
         # Default time range: shift start to now
         self._set_default_time_range()
     
@@ -349,32 +448,113 @@ class DataManager:
                 purge_old_data()
                 # Refresh permissions in background (non-blocking)
                 self._refresh_permissions_background()
+                # Resolve any missing logins from FCLM timeDetails (non-blocking)
+                self._resolve_logins_background()
             
             logger.info("Successfully fetched %d process paths", len(rate_data))
             return True
     
     def _refresh_permissions_background(self):
-        """Refresh FCLM permissions for active associates in a background thread."""
+        """Verify FCLM permissions for associates seen in the FCLM rate data."""
         abp = self.current_data.get("associates_by_path", {})
-        all_ids = set()
+        ids = set()
         for assocs in abp.values():
             for a in assocs:
                 eid = a.get("employee_id", "")
                 if eid:
-                    all_ids.add(eid)
-        
-        if not all_ids:
-            return
-        
+                    ids.add(eid)
+        self._verify_permissions_background(ids)
+
+    def _verify_permissions_background(self, identifiers):
+        """
+        Verify FCLM permissions for a set of identifiers (employee IDs OR logins;
+        the FCLM /employee/permissions endpoint resolves either) in a background
+        thread. Results are MERGED into the cache and keyed by the identifier
+        used, so both FCLM-associate employee_ids and Picking-Console logins can
+        appear in the X-Train tab.
+
+        Two safeguards prevent the runaway re-checking seen with high-frequency
+        console pushes:
+          1. We remember every identifier we've ATTEMPTED (even those that
+             returned no permissions), so nobody is re-checked every cycle.
+          2. A single-flight guard ensures only ONE verification thread runs at
+             a time; new identifiers discovered while it runs are picked up on
+             the next call.
+        """
+        identifiers = {str(i).strip() for i in (identifiers or set()) if str(i).strip()}
+        with self._perms_lock:
+            pending = {i for i in identifiers if i not in self._perms_attempted}
+            if not pending or self._perms_verifying:
+                return
+            # Mark as attempted up front so concurrent pushes don't re-queue them.
+            self._perms_attempted |= pending
+            self._perms_verifying = True
+
         def _do_check():
-            logger.info("Background: verifying permissions for %d associates...", len(all_ids))
-            from cross_training import batch_check_fclm_permissions
-            result = batch_check_fclm_permissions(list(all_ids), self.config)
-            self._cached_permissions = result
-            logger.info("Background: permissions verified (%d associates)", len(result))
-        
+            try:
+                logger.info("Background: verifying permissions for %d new identifiers...", len(pending))
+                from cross_training import batch_check_fclm_permissions
+                result = batch_check_fclm_permissions(list(pending), self.config)
+                merged = dict(self._cached_permissions)
+                merged.update(result)  # only found-perms are returned; that's fine
+                self._cached_permissions = merged
+                logger.info(
+                    "Background: verified %d/%d had permissions; cache now %d",
+                    len(result), len(pending), len(merged)
+                )
+            except Exception as e:
+                logger.warning("Permission verification error: %s", e)
+                # Allow a retry of this batch on a later push.
+                with self._perms_lock:
+                    self._perms_attempted -= pending
+            finally:
+                with self._perms_lock:
+                    self._perms_verifying = False
+
         threading.Thread(target=_do_check, daemon=True).start()
     
+    def _resolve_logins_background(self):
+        """
+        Resolve logins for associates that still have no login, using FCLM
+        timeDetails (keyed by employee_id). Runs in the background, single-flight,
+        and persists results to the employee_login_map so they're reused and show
+        up across the dashboard (associate tables, X-Train, move log).
+        """
+        abp = (self.current_data or {}).get("associates_by_path", {})
+        need = set()
+        for assocs in abp.values():
+            for a in assocs:
+                eid = a.get("employee_id", "")
+                if eid and not (a.get("login") or "").strip():
+                    need.add(eid)
+
+        with self._login_lock:
+            pending = {e for e in need if e not in self._login_attempted}
+            if not pending or self._login_resolving:
+                return
+            self._login_attempted |= pending
+            self._login_resolving = True
+
+        def _do():
+            try:
+                logger.info("Background: resolving %d logins via FCLM timeDetails...", len(pending))
+                from login_lookup import batch_fetch_logins
+                from learning_engine import upsert_employee_logins
+                mapping = batch_fetch_logins(list(pending), self.config)
+                if mapping:
+                    upsert_employee_logins(mapping)
+                    logger.info("Background: resolved & persisted %d logins", len(mapping))
+            except Exception as e:
+                logger.warning("Login resolution error: %s", e)
+                with self._login_lock:
+                    self._login_attempted -= pending
+            finally:
+                with self._login_lock:
+                    self._login_resolving = False
+
+        threading.Thread(target=_do, daemon=True).start()
+
+
     def _build_url(self):
         """Build the functionRollup URL for the current time range."""
         base_url = "https://fclm-portal.amazon.com/reports/functionRollup"
@@ -491,8 +671,29 @@ class DataManager:
             "subpaths_by_path": self._subpath_counts(),
             "subpath_rates": self._subpath_rates(),
             "pick_hc": self._pick_hc_summary(),
-            "eid_to_login": {v: k for k, v in self.shift_info.get("login_to_employee_id", {}).items()},
+            "eid_to_login": self._eid_to_login_combined(),
         }
+
+    def _eid_to_login_combined(self):
+        """
+        Build employee_id -> login for the dashboard (X-Train tab, etc.).
+
+        Combines two sources so logins resolve even at sites without a
+        Certificate-tracking CSV:
+          1. Certificate CSV (login_to_employee_id) — reversed.
+          2. Persisted Picking Console bridge (employee_login_map), which is
+             built live from the console workforce feed and namespaced per site.
+        The console bridge wins on conflict (it reflects who's actually here now).
+        """
+        combined = {v: k for k, v in self.shift_info.get("login_to_employee_id", {}).items()}
+        try:
+            from learning_engine import get_employee_login_map
+            for eid, login in (get_employee_login_map() or {}).items():
+                if eid and login:
+                    combined[eid] = login
+        except Exception:
+            pass
+        return combined
 
     def _subpath_counts(self):
         """
@@ -718,6 +919,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._handle_move_log()
         elif path == "/api/move-log/export":
             self._handle_move_log_export()
+        elif path == "/api/sites":
+            self._handle_get_sites()
         # Static file serving
         elif path == "/" or path == "/index.html":
             self._serve_file("staffing_dashboard.html", "text/html")
@@ -753,6 +956,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._handle_update_workforce()
         elif path == "/api/run-update":
             self._handle_run_update()
+        elif path == "/api/set-site":
+            self._handle_set_site()
         else:
             self.send_error(404)
     
@@ -767,6 +972,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 current["subpaths_by_path"] = data_manager._subpath_counts()
                 current["subpath_rates"] = data_manager._subpath_rates()
                 current["pick_hc"] = data_manager._pick_hc_summary()
+                current["workforce_fc_mismatch"] = data_manager.workforce_fc_mismatch
+                # Refresh login map so console-bridged logins (e.g. new CLT3 pickers)
+                # show up without waiting for the next FCLM fetch.
+                current["eid_to_login"] = data_manager._eid_to_login_combined()
                 # Add permissions loading status
                 current["xtrain_status"] = "ready" if len(data_manager._cached_permissions) > 0 else "loading"
                 current["xtrain_count"] = len(data_manager._cached_permissions)
@@ -885,13 +1094,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             
             data_manager.set_time_range(start, end)
             
-            # Reload cross-training with new shift filter
-            shift_prefixes = ['N'] if shift == 'night' else ['D']
-            from cross_training import parse_cross_training, get_cross_training_summary
-            data_manager.cross_training, data_manager.shift_info = parse_cross_training(shift_filter=True)
-            data_manager.cross_training_summary = get_cross_training_summary(data_manager.cross_training)
-            data_manager.employee_id_map = data_manager.shift_info.get("employee_id_map", {})
-            
+            # Cross-training comes from live FCLM permissions (per warehouse),
+            # so changing shift only changes the data time window here.
             # Re-fetch data
             success = data_manager.fetch_data()
             
@@ -1109,7 +1313,38 @@ class DashboardHandler(BaseHTTPRequestHandler):
         try:
             payload = json.loads(body)
             pickers = payload.get("pickers", [])
-            
+
+            # ---- Site guard ----
+            # The Tampermonkey add-on has its own FC selector, independent of the
+            # dashboard's active site. Reject workforce data whose FC does not
+            # match this dashboard's warehouse so e.g. HOU8 pickers never land in
+            # a CLT3 move log. The add-on sends its FC as payload["fc"]; older
+            # add-ons that don't send it are allowed through (best-effort) but a
+            # warning is logged.
+            incoming_fc = (payload.get("fc") or payload.get("fcCode") or "").strip().upper()
+            active_fc = (data_manager.config.get("warehouse_id") or "").strip().upper()
+            if incoming_fc and active_fc and incoming_fc != active_fc:
+                data_manager.workforce_fc_mismatch = incoming_fc
+                logger.warning(
+                    "Rejected workforce push: add-on FC=%s but dashboard site=%s. "
+                    "Set the OB Pick Center FC to %s.",
+                    incoming_fc, active_fc, active_fc
+                )
+                self._set_headers("application/json", 409)
+                self.wfile.write(json.dumps({
+                    "success": False,
+                    "error": f"FC mismatch: add-on is set to {incoming_fc} but dashboard is {active_fc}. "
+                             f"Change the OB Pick Center FC to {active_fc}.",
+                    "expected_fc": active_fc,
+                    "received_fc": incoming_fc,
+                }).encode())
+                return
+            if not incoming_fc:
+                logger.warning(
+                    "Workforce push has no FC field (older add-on). Accepting for site %s; "
+                    "update OB Pick Center so it tags its FC.", active_fc or "?"
+                )
+
             # Paths to exclude (not pick paths)
             EXCLUDE_PATHS = {'PPTrans', 'PPQA', 'PPTransOut', 'PPTransIn', 'PPICQA', 'PPCount', 'PPRebinHotpick', 'PPRebin'}
             
@@ -1199,6 +1434,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
             data_manager.subpaths_by_path = subpaths_by_path
             data_manager.name_to_login = name_to_login
             data_manager.workforce_updated = datetime.now()
+            data_manager.workforce_fc_mismatch = None  # valid push for this site
+
+            # Verify FCLM permissions for everyone in the console feed (by login),
+            # so the X-Train tab covers pickers who have no FCLM rate row yet.
+            try:
+                console_logins = set()
+                for buckets in workforce_by_path.values():
+                    console_logins.update(buckets.get("total", []))
+                if console_logins:
+                    data_manager._verify_permissions_background(console_logins)
+            except Exception as pe:
+                logger.warning("Console permission verify failed: %s", pe)
 
             # Detect path moves directly from the Picking Console feed (login +
             # exact console processPath). This is the authoritative move source.
@@ -1223,17 +1470,27 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 hc["total"], hc["active"], hc["inactive"], len(workforce_by_path)
             )
 
-            self._set_headers("application/json")
-            self.wfile.write(json.dumps({
-                "success": True,
-                "total_hc": hc["total"],
-                "active_hc": hc["active"],
-                "inactive_hc": hc["inactive"],
-                "active_count": hc["active"],  # backward-compatible field
-            }).encode())
+            # The add-on POSTs with a short timeout and may disconnect before we
+            # reply (it doesn't read the body). Guard the write so a dropped
+            # connection doesn't raise/spam tracebacks — the data is already stored.
+            try:
+                self._set_headers("application/json")
+                self.wfile.write(json.dumps({
+                    "success": True,
+                    "total_hc": hc["total"],
+                    "active_hc": hc["active"],
+                    "inactive_hc": hc["inactive"],
+                    "active_count": hc["active"],  # backward-compatible field
+                }).encode())
+            except (ConnectionError, OSError):
+                pass  # client already disconnected; workforce was processed fine
         except Exception as e:
-            self._set_headers("application/json", 500)
-            self.wfile.write(json.dumps({"error": str(e)}).encode())
+            logger.warning("update-workforce error: %s", e)
+            try:
+                self._set_headers("application/json", 500)
+                self.wfile.write(json.dumps({"error": str(e)}).encode())
+            except (ConnectionError, OSError):
+                pass
     
     def _handle_run_update(self):
         """Download latest files from GitHub and restart server."""
@@ -1253,6 +1510,82 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json")
             self.wfile.write(json.dumps({"success": True, "output": result.stdout}).encode())
             
+        except Exception as e:
+            self._set_headers("application/json", 500)
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
+    
+    def _handle_get_sites(self):
+        """List available sites (from the sites/ folder) and the active one."""
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        sites_dir = os.path.join(script_dir, "sites")
+        sites = []
+        if os.path.isdir(sites_dir):
+            for fn in os.listdir(sites_dir):
+                if fn.lower().endswith(".yaml"):
+                    sites.append(os.path.splitext(fn)[0].upper())
+        sites = sorted(set(sites))
+        active = (data_manager.config.get("warehouse_id") if data_manager else "") or ""
+        self._set_headers("application/json")
+        self.wfile.write(json.dumps({"sites": sites, "active": active.upper()}).encode())
+
+    def _handle_set_site(self):
+        """
+        Switch the active site. Persists the choice to site.txt and relaunches
+        the server with --site=<NEW> so config, warehouse, and the per-site
+        history DB all reload cleanly. The current process exits after spawning
+        the replacement; the browser polls /api/status and reloads when it's up.
+        """
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length).decode()
+        try:
+            params = json.loads(body or "{}")
+            new_site = (params.get("site") or "").strip().upper()
+            if not new_site or not new_site.isalnum():
+                self._set_headers("application/json", 400)
+                self.wfile.write(json.dumps({"error": "Provide a valid site code"}).encode())
+                return
+
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+
+            # Only allow sites we actually have a config for (or the current one).
+            sites_dir = os.path.join(script_dir, "sites")
+            known = set()
+            if os.path.isdir(sites_dir):
+                known = {os.path.splitext(f)[0].upper() for f in os.listdir(sites_dir) if f.lower().endswith(".yaml")}
+            if known and new_site not in known:
+                self._set_headers("application/json", 400)
+                self.wfile.write(json.dumps({"error": f"Unknown site '{new_site}'. Add sites/{new_site}.yaml first."}).encode())
+                return
+
+            # Persist selection so future launches (and the restart) use it.
+            with open(os.path.join(script_dir, "site.txt"), "w") as f:
+                f.write(new_site)
+
+            # Respond BEFORE restarting so the browser gets the ack.
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps({"success": True, "site": new_site, "restarting": True}).encode())
+            try:
+                self.wfile.flush()
+            except Exception:
+                pass
+
+            # Spawn a fresh server bound to the new site, then exit this one.
+            def _restart():
+                import subprocess
+                time.sleep(0.8)  # let the HTTP response flush
+                python_exe = sys.executable
+                server_py = os.path.join(script_dir, "staffing_dashboard_server.py")
+                try:
+                    subprocess.Popen(
+                        [python_exe, server_py, f"--site={new_site}", "--no-browser"],
+                        cwd=script_dir,
+                    )
+                finally:
+                    # Hard-exit the current process so the port frees for the new one.
+                    os._exit(0)
+
+            threading.Thread(target=_restart, daemon=True).start()
+
         except Exception as e:
             self._set_headers("application/json", 500)
             self.wfile.write(json.dumps({"error": str(e)}).encode())

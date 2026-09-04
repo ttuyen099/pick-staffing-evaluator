@@ -13,10 +13,22 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
-# Store DB in a fixed location per user (survives folder moves/updates)
+# Store DB in a fixed location per user (survives folder moves/updates).
+# The DB is namespaced per site (warehouse) so multiple sites don't mix data.
+# The active site is passed via the PICKMATRIX_SITE env var (set at startup);
+# defaults to a shared DB name for backward compatibility with single-site setups.
 _DB_DIR = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'PickMatrix')
 os.makedirs(_DB_DIR, exist_ok=True)
-DB_PATH = os.path.join(_DB_DIR, "rate_history.db")
+
+
+def _site_db_path():
+    site = (os.environ.get('PICKMATRIX_SITE') or '').strip().upper()
+    if site:
+        return os.path.join(_DB_DIR, f"rate_history_{site}.db")
+    return os.path.join(_DB_DIR, "rate_history.db")
+
+
+DB_PATH = _site_db_path()
 RETENTION_DAYS = 30
 
 

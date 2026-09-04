@@ -21,7 +21,16 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'PickMatrix', "rate_history.db")
+def _site_db_path():
+    # Must match rate_history._site_db_path so both share one per-site DB file.
+    _dir = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'PickMatrix')
+    site = (os.environ.get('PICKMATRIX_SITE') or '').strip().upper()
+    if site:
+        return os.path.join(_dir, f"rate_history_{site}.db")
+    return os.path.join(_dir, "rate_history.db")
+
+
+DB_PATH = _site_db_path()
 
 
 # Map the FCLM path names used for move detection to the Picking Console

@@ -1,7 +1,83 @@
 # PickMatrix — Changelog
 
-All notable changes to PickMatrix (HOU8 Pick Staffing Evaluator) are documented here.
+All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
+
+## [2.2.0] — More sites
+
+### Added
+- **11 new sites**: LAS6, MDT4, MCE1, MDT1, PIT2, ORD2, OKC2, SNA4, MKC4,
+  FAT2, SAT4 (each `sites/<FC>.yaml`). All appear in the in-dashboard Site
+  dropdown. Path names auto-discover from each site's FCLM report; logins
+  resolve from that site's employee roster.
+- Health-checked all sites: FCLM pick paths load and the full employee roster
+  resolves logins (100% associate→login match on spot checks).
+
+## [2.1.5] — Reliable login resolution via FCLM roster
+
+### Added
+- **Login lookup from the FCLM Employee Roster** (`login_lookup.py`): one call
+  returns the whole FC's employee_id→login map. Associates and X-Train now show
+  real logins instead of employee IDs, with no CSV and no dependence on
+  name-matching the Picking Console feed. Resolved logins are persisted per site.
+
+## [2.1.4] — Permission verification stability
+
+### Fixed
+- **X-Train no longer stuck "verifying".** Permission checks are now
+  single-flight (one at a time) and remember every identifier attempted (even
+  those with no permissions), so high-frequency console pushes can't stack
+  overlapping verification threads or re-check the same people forever.
+- Workforce POST responses are disconnect-safe (no more `WinError 10053`
+  tracebacks when the add-on's short-timeout client drops the connection).
+
+## [2.1.3] — Cross-training is FCLM-only; wrong-site data guard
+
+### Changed
+- **Cross-training now comes solely from live FCLM permissions.** The
+  Certificate-tracking CSV is no longer loaded or bundled. X-Train is always
+  correct for the active site with zero setup.
+- **X-Train now also verifies pickers in the Picking Console feed** (by login),
+  not just associates with FCLM rate rows — so on-shift pickers appear even
+  before they log pick time. Verification is incremental (no repeat checks).
+
+### Added
+- **In-dashboard Site selector** (top-bar dropdown) that switches sites and
+  restarts cleanly onto the chosen site's config + per-site history DB.
+- **FC-mismatch guard:** the server rejects OB Pick Center workforce pushes
+  whose FC doesn't match the active site, and the dashboard shows a warning.
+  Requires OB Pick Center v3.6+ (which tags its FC on each push).
+
+### Fixed
+- **Login resolution without a CSV:** logins resolve via the per-site Picking
+  Console bridge, so the X-Train "Login" column no longer shows raw employee IDs.
+- **Auto-updater no longer overwrites a newer local build** — it updates only
+  when the GitHub version is strictly newer.
+- **Start Dashboard.bat** site-selection block rewritten (cmd-safe) so the
+  terminal no longer closes on launch.
+
+## [2.1.0] — Multi-site support
+
+**PickMatrix now works for more than one FC.**
+
+### Added
+- **Site selection.** Pick your site via `Start Dashboard.bat CLT3`, a `site.txt`
+  file, or the `PICKMATRIX_SITE` env var. Per-site settings live in
+  `sites/<FC>.yaml` (warehouse_id, process_id, path goals, port).
+- **CLT3 support** (`sites/CLT3.yaml`). Path names and FCLM function IDs
+  auto-discover from CLT3's FCLM report, so no manual ID entry is needed.
+- **Active site badge** in the dashboard header, and the page title reflects
+  the site.
+- **Per-site data isolation.** Rate history + move log are stored in a
+  per-site database (`rate_history_<FC>.db`), so sites never mix data.
+- **Per-site local settings.** Custom rate goals and attrition entries are now
+  keyed by site in your browser (no bleed between FCs).
+
+### Notes
+- HOU8 behavior is unchanged when no site is selected (uses the existing
+  config and shared history DB).
+- To add another site, copy `sites/CLT3.yaml` to `sites/<FC>.yaml` and set its
+  `warehouse_id` (and `process_id` if different).
 
 ## [2.0.0] — Picking Console is now the source of truth for Headcount
 

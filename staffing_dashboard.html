@@ -211,7 +211,11 @@
 </head>
 <body>
     <div class="control-bar">
-        <div class="logo">Pick<span>Matrix</span></div>
+        <div class="logo">Pick<span>Matrix</span><span id="siteBadge" style="margin-left:8px;font-size:0.7rem;font-weight:700;color:#0a84ff;background:#0a84ff22;border:1px solid #0a84ff55;border-radius:6px;padding:2px 8px;vertical-align:middle;"></span></div>
+        <div class="control-group">
+            <label>Site</label>
+            <select id="siteSelect" onchange="changeSite()"></select>
+        </div>
         <div class="control-group">
             <label>Shift</label>
             <select id="shiftSelect" onchange="changeShift()">
@@ -286,7 +290,24 @@
     let data = null, refreshTimer = null, countdownTimer = null, nextRefresh = null, refreshMin = 15;
     let openPaths = new Set(), ctOpen = false, ctDept = 'All', selectedPath = null;
     let moveLog = [], moveLogFilter = '', moveLogScroll = 0, moveLogRange = 'shift';
+    // Custom rate goals are stored per-site so goals don't bleed across FCs.
+    // The key is finalized once we know the active site (from data.warehouse_id);
+    // until then we use the legacy global key for backward compatibility.
+    let _goalSite = '';
+    function goalKey() { return _goalSite ? ('staffing_goals_' + _goalSite) : 'staffing_goals'; }
     let customGoals = JSON.parse(localStorage.getItem('staffing_goals') || '{}');
+    function loadGoalsForSite(site) {
+        const s = (site || '').toUpperCase();
+        if (s === _goalSite) return;
+        _goalSite = s;
+        let stored = localStorage.getItem(goalKey());
+        // One-time migration: seed a new site's goals from the legacy global key.
+        if (stored === null && s) {
+            const legacy = localStorage.getItem('staffing_goals');
+            if (legacy !== null) stored = legacy;
+        }
+        customGoals = JSON.parse(stored || '{}');
+    }
     const API = window.location.origin;
     const DC = {'Pick':'pick','Stow':'stow','Receive':'receive','Pack':'pack','Ship Dock':'ship-dock','IB Dock':'ib-dock','ICQA':'icqa','VRets':'vrets'};
 
@@ -298,7 +319,7 @@
         const pathName = input.dataset.path;
         const val = parseFloat(input.value) || 0;
         customGoals[pathName] = val;
-        localStorage.setItem('staffing_goals', JSON.stringify(customGoals));
+        localStorage.setItem(goalKey(), JSON.stringify(customGoals));
         render();
     }
 
@@ -376,8 +397,83 @@
 
     function resetToShift() { const w=getShiftWindow(); document.getElementById('startTime').value=fmt(w.start); document.getElementById('endTime').value=fmt(w.end); applyTimeRange(); }
 
+    // ---- Multi-site selector ----
+    async function loadSites() {
+        try {
+            const r = await fetch(API + '/api/sites');
+            if (!r.ok) return;
+            const info = await r.json();
+            const sel = document.getElementById('siteSelect');
+            if (!sel || !info.sites) return;
+            sel.innerHTML = info.sites.map(s => `<option value="${s}"${s===info.active?' selected':''}>${s}</option>`).join('');
+            // If only one site is configured, keep the selector but it's a no-op.
+        } catch(e) { /* selector stays empty; not fatal */ }
+    }
+
+    async function changeSite() {
+        const sel = document.getElementById('siteSelect');
+        const site = sel.value;
+        if (!site) return;
+        // Confirm — switching restarts the server and reloads the page.
+        setStatus('loading', 'Switching to ' + site + '…');
+        const loadingSpan = document.querySelector('#loading span');
+        if (loadingSpan) loadingSpan.textContent = 'Switching site to ' + site + ' — restarting…';
+        showLoading(true);
+        try {
+            const r = await fetch(API + '/api/set-site', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ site })
+            });
+            const res = await r.json();
+            if (!res.success) { setStatus('error', res.error || 'Switch failed'); showLoading(false); await loadSites(); return; }
+            // Server is restarting. Poll /api/status until it's back, then reload.
+            waitForServerThenReload(site);
+        } catch(e) {
+            // The restart can drop the in-flight connection; treat as "restarting".
+            waitForServerThenReload(site);
+        }
+    }
+
+    function waitForServerThenReload(site) {
+        let tries = 0;
+        const iv = setInterval(async () => {
+            tries++;
+            try {
+                const r = await fetch(API + '/api/status', {cache:'no-store'});
+                if (r.ok) { clearInterval(iv); location.reload(); return; }
+            } catch(e) { /* still down */ }
+            if (tries > 30) { clearInterval(iv); setStatus('error','Server did not come back — restart Start Dashboard.bat'); showLoading(false); }
+        }, 1000);
+    }
+
     function render() {
         if(!data) return;
+        // Show the active site (warehouse) in the header badge and page title.
+        const wh = data.warehouse_id || '';
+        const badge = document.getElementById('siteBadge');
+        if (badge) badge.textContent = wh;
+        if (wh) document.title = 'PickMatrix - ' + wh;
+        loadGoalsForSite(wh);
+        _attritionSite = (wh || '').toUpperCase();
+        // Warn if the OB Pick Center add-on is pushing a different FC's workforce.
+        (function(){
+            const mm = data.workforce_fc_mismatch;
+            let el = document.getElementById('fcMismatchBanner');
+            if (mm && wh) {
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'fcMismatchBanner';
+                    el.style.cssText = 'background:#7f1d1d;color:#fecaca;border:1px solid #ef4444;border-radius:8px;padding:8px 14px;margin:8px 12px;font-size:0.8rem;font-weight:600;';
+                    const grid = document.getElementById('pathGrid');
+                    grid.parentNode.insertBefore(el, grid);
+                }
+                el.innerHTML = '&#9888; OB Pick Center is set to <b>'+mm+'</b> but this dashboard is <b>'+wh+'</b>. '+
+                    'Headcount/moves are being ignored. In Tampermonkey, set the OB Pick Center FC to <b>'+wh+'</b>.';
+                el.style.display = 'block';
+            } else if (el) {
+                el.style.display = 'none';
+            }
+        })();
         const paths=data.paths||{}, abp=data.associates_by_path||{}, exp=data.rate_expectations||{}, defExp=data.default_rate_expectation||5, tol=data.tolerance||0.05, ctMap=data.cross_training_by_employee_id||{};
         // Don't overwrite time inputs - user controls these via shift selector or manual entry
 
@@ -481,8 +577,6 @@
         } else if(selectedPath==='xtrain'){
             // X-Train Lookup view
             const ctMap=data.cross_training_by_employee_id||{};
-            const ct=data.cross_training||{};
-            const allAssocs=ct.associates||{};
             html=`<div style="background:rgba(44,44,46,0.95);border:1px solid #38383a;border-radius:12px;padding:20px;">
                 <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
                     <h3 style="color:#fff;font-size:1rem;">Cross-Training Lookup</h3>
@@ -503,20 +597,28 @@
                     <tbody id="xtrainBody">`;
             // Show all associates with permissions
             const entries=Object.entries(ctMap).sort((a,b)=>b[1].length-a[1].length);
-            for(const [eid,perms] of entries){
+            for(const [key,perms] of entries){
                 const dots=perms.map(d=>`<span class="ct-d ${DC[d]||''}" title="${d}"></span>`).join(' ');
-                // Find login for this employee ID
-                let login='';
-                const eidMap=data.eid_to_login||{};
-                if(eidMap[eid]){login=eidMap[eid];}
-                else{
-                    const abp=data.associates_by_path||{};
-                    for(const assocs of Object.values(abp)){
-                        const found=assocs.find(a=>a.employee_id===eid);
-                        if(found&&found.login){login=found.login;break;}
+                // A permission entry is keyed by either an employee_id (all digits,
+                // from FCLM rate rows) or a login (has letters, from the Picking
+                // Console feed). Resolve the display columns accordingly.
+                let login='', eid='';
+                const isLogin = /[a-zA-Z]/.test(key);
+                if(isLogin){
+                    login=key;  // console-sourced: key is the login
+                } else {
+                    eid=key;
+                    const eidMap=data.eid_to_login||{};
+                    if(eidMap[eid]){login=eidMap[eid];}
+                    else{
+                        const abp=data.associates_by_path||{};
+                        for(const assocs of Object.values(abp)){
+                            const found=assocs.find(a=>a.employee_id===eid);
+                            if(found&&found.login){login=found.login;break;}
+                        }
                     }
                 }
-                html+=`<tr class="xtrain-row" data-search="${login.toLowerCase()} ${eid}"><td style="color:#e0e0e0;">${login||eid}</td><td style="color:#636366;">${eid}</td><td><span class="ct-dots">${dots}</span> <span style="color:#636366;font-size:0.65rem;">${perms.join(', ')}</span></td></tr>`;
+                html+=`<tr class="xtrain-row" data-search="${(login||'').toLowerCase()} ${eid}"><td style="color:#e0e0e0;">${login||eid||key}</td><td style="color:#636366;">${eid||'—'}</td><td><span class="ct-dots">${dots}</span> <span style="color:#636366;font-size:0.65rem;">${perms.join(', ')}</span></td></tr>`;
             }
             html+=`</tbody></table></div>`;
         } else {
@@ -793,8 +895,9 @@
 
     function selectPath(name) { selectedPath = name; render(); }
 
-    // Attrition tracking (stored in localStorage per shift date)
-    function getAttritionKey(){ return 'pickmatrix_attrition_'+new Date().toISOString().slice(0,10); }
+    // Attrition tracking (stored in localStorage per site + shift date)
+    let _attritionSite = '';
+    function getAttritionKey(){ return 'pickmatrix_attrition_'+(_attritionSite?_attritionSite+'_':'')+new Date().toISOString().slice(0,10); }
     function getAttrition(){ return JSON.parse(localStorage.getItem(getAttritionKey())||'[]'); }
     function addAttrition(){
         const input=document.getElementById('attritionInput');
@@ -1009,6 +1112,7 @@
                     data.workforce_by_path=fresh.workforce_by_path||data.workforce_by_path;
                     data.subpaths_by_path=fresh.subpaths_by_path||data.subpaths_by_path;
                     data.subpath_rates=fresh.subpath_rates||data.subpath_rates;
+                    data.workforce_fc_mismatch=fresh.workforce_fc_mismatch;
                     data.pick_hc=fresh.pick_hc||data.pick_hc;
                     data.xtrain_status=fresh.xtrain_status;
                     data.xtrain_count=fresh.xtrain_count;
@@ -1095,7 +1199,7 @@
             setStatus('error','JS Error: '+err.message);
             document.getElementById('pathGrid').innerHTML='<div style="text-align:center;padding:40px;color:#f87171;grid-column:1/-1;"><h2>Render Error</h2><p>'+err.message+'</p><p style="margin-top:8px;color:#94a3b8;">Check browser console (F12) for details</p></div>';
         }
-        showLoading(false);setupAutoRefresh();startHCPoller();
+        showLoading(false);setupAutoRefresh();startHCPoller();loadSites();
     });
     </script>
 <div style="text-align:center;padding:12px;font-size:0.6rem;color:#636366;border-top:1px solid #38383a;margin-top:20px;">PickMatrix <span id="footerVer" id="footerVer"></span> | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>

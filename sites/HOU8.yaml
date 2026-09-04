@@ -1,0 +1,40 @@
+# ============================================================
+# PickMatrix Site Config — HOU8
+# ============================================================
+# Selected via site.txt, --site=HOU8, or PICKMATRIX_SITE=HOU8.
+# (If no site is selected, the base config.yaml / staffing_config.yaml are
+#  used, which are the HOU8 defaults — so this file is optional for HOU8.)
+
+warehouse_id: "HOU8"
+process_id: "1003001"
+
+process_paths:
+  "RF Pick Singles": "4300002523"
+  "OrderPickLowDensityP": "4300016816"
+  "OrderPickVNA": "4300020902"
+  "Orderpicker Pick": "4300006870"
+  "OrderPick SIOC": "4300016815"
+  "MultiRelayPick": "4300016817"
+  "RF Pick": "4300000184"
+  "Giftwrap Picking": "4300000707"
+
+rate_expectations:
+  "RF Pick Singles": 50
+  "OrderPickLowDensityP": 20
+  "OrderPickVNA": 35
+  "Orderpicker Pick": 30
+  "OrderPick SIOC": 20
+  "MultiRelayPick": 20
+  "RF Pick": 5
+  "Giftwrap Picking": 5
+
+default_rate_expectation: 5
+
+dashboard:
+  refresh_interval_minutes: 15
+  port: 8787
+
+staffing_evaluator:
+  shift_start_hour: 18
+  shift_start_minute: 0
+  tolerance: 0.05

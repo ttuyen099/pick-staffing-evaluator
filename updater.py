@@ -15,10 +15,24 @@ UPDATE_FILES = [
     "cross_training.py",
     "rate_history.py",
     "learning_engine.py",
+    "login_lookup.py",
     "version.txt",
     "updater.py",
     "Start Dashboard.bat",
     "CHANGELOG.md",
+    "sites/HOU8.yaml",
+    "sites/CLT3.yaml",
+    "sites/LAS6.yaml",
+    "sites/MDT4.yaml",
+    "sites/MCE1.yaml",
+    "sites/MDT1.yaml",
+    "sites/PIT2.yaml",
+    "sites/ORD2.yaml",
+    "sites/OKC2.yaml",
+    "sites/SNA4.yaml",
+    "sites/MKC4.yaml",
+    "sites/FAT2.yaml",
+    "sites/SAT4.yaml",
 ]
 
 def get_version_remote():
@@ -47,6 +61,10 @@ def update():
             # Use cache-busted raw URL
             r = requests.get(f"{RAW_URL}/{f}?t={int(time.time())}", timeout=15)
             if r.status_code == 200:
+                # Create parent directory for nested files (e.g. sites/CLT3.yaml)
+                parent = os.path.dirname(f)
+                if parent:
+                    os.makedirs(parent, exist_ok=True)
                 with open(f, 'w', encoding='utf-8', newline='\n') as fh:
                     fh.write(r.text)
                 updated += 1

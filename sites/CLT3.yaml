@@ -1,0 +1,53 @@
+# ============================================================
+# PickMatrix Site Config — CLT3
+# ============================================================
+# Selected via site.txt, --site=CLT3, or PICKMATRIX_SITE=CLT3.
+# Overrides the base config.yaml / staffing_config.yaml for this site.
+#
+# Path NAMES and FCLM function IDs are auto-discovered at runtime from CLT3's
+# FCLM functionRollup response, so you do NOT need to hand-enter function IDs.
+# The process_paths list below is optional/for-reference; the dashboard will
+# populate whatever paths CLT3's FCLM report actually returns.
+
+# ---- Auth / warehouse ----
+warehouse_id: "CLT3"
+# Standard Pick functionRollup process id. If CLT3 uses a different process id,
+# update this value (check the FCLM functionRollup URL for CLT3).
+process_id: "1003001"
+
+# ---- Process paths (optional; auto-discovered from FCLM if omitted) ----
+# Listed for reference only. Function IDs are placeholders — the live names come
+# from FCLM. Remove/adjust once CLT3's actual paths are confirmed.
+# process_paths:
+#   "RF Pick Singles": ""
+#   "OrderPickLowDensityP": ""
+#   "OrderPickVNA": ""
+#   "Orderpicker Pick": ""
+#   "OrderPick SIOC": ""
+#   "MultiRelayPick": ""
+#   "RF Pick": ""
+
+# ---- Rate goals (UPH) — starting values; tune on the dashboard per path ----
+# These are only defaults; each user can click the goal number to change it.
+rate_expectations:
+  "RF Pick Singles": 50
+  "OrderPickLowDensityP": 20
+  "OrderPickVNA": 35
+  "Orderpicker Pick": 30
+  "OrderPick SIOC": 20
+  "MultiRelayPick": 20
+  "RF Pick": 5
+  "Giftwrap Picking": 5
+
+default_rate_expectation: 5
+
+# ---- Dashboard ----
+dashboard:
+  refresh_interval_minutes: 15
+  port: 8787
+
+# ---- Shift window ----
+staffing_evaluator:
+  shift_start_hour: 18
+  shift_start_minute: 0
+  tolerance: 0.05
