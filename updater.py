@@ -33,6 +33,8 @@ UPDATE_FILES = [
     "sites/MKC4.yaml",
     "sites/FAT2.yaml",
     "sites/SAT4.yaml",
+    "sites/LGB6.yaml",
+    "sites/LFT1.yaml",
 ]
 
 def get_version_remote():

@@ -3,6 +3,13 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.3.0] — 2 more sites
+
+### Added
+- **LGB6** and **LFT1** (`sites/LGB6.yaml`, `sites/LFT1.yaml`). 15 sites total.
+  Health-checked: FCLM paths load and the employee roster resolves logins
+  (100% associate→login match on both).
+
 ## [2.2.1] — Login display fix
 
 ### Fixed
