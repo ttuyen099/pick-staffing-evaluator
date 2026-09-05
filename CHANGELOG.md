@@ -3,6 +3,15 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.5.0] — 9 more sites
+
+### Added
+- **DEN8, CMH2, GSO1, GDL1, MTY1, MTY3, SMF6, LIT2, MDW6** (28 sites total;
+  MDT1 was already present). Health-checked: FCLM paths load and the employee
+  roster resolves logins on all 10 (MTY3 at 68/72 — the remaining 4 are very
+  recent hires not yet in the roster snapshot; resolves automatically as the
+  roster refreshes).
+
 ## [2.4.3] — Updated README (required tabs) now ships to users
 
 ### Changed
