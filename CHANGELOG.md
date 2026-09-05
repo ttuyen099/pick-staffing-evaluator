@@ -3,6 +3,12 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.5.1] — Add CHA2
+
+### Added
+- **CHA2** (29 sites total). Health-checked: 12 FCLM paths load, 148/148
+  associates resolve logins from the employee roster (100% match).
+
 ## [2.5.0] — 9 more sites
 
 ### Added

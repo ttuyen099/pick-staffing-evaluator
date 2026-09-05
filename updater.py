@@ -49,6 +49,7 @@ UPDATE_FILES = [
     "sites/SMF6.yaml",
     "sites/LIT2.yaml",
     "sites/MDW6.yaml",
+    "sites/CHA2.yaml",
 ]
 
 def get_version_remote():
