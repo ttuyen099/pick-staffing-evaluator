@@ -3,6 +3,21 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.5.2] — 9 more sites (Mexico expansion)
+
+### Added
+- **TEB3, CMH3, GDL2, HMO3, MID1, MEX1, TIJ1, MEX3, MTY2** (38 sites total).
+  Health-checked: FCLM paths load and the employee roster resolves logins
+  (100% match on 8 of 9; TIJ1 at 12/16 — remaining are recent
+  hires not yet in the roster snapshot, resolves automatically).
+- MTY1, GDL1, MTY3 (previously added) re-verified healthy.
+
+### Note
+- **TY2 was requested but was a typo** — FCLM returns an HTTP 500 error for
+  `warehouseId=TY2` (not a recognized warehouse code). Confirmed correct code
+  is **MTY2**, which was added and health-checked successfully (24/24 login
+  match) instead.
+
 ## [2.5.1] — Add CHA2
 
 ### Added

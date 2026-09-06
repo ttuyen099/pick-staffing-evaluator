@@ -1,0 +1,30 @@
+# ============================================================
+# PickMatrix Site Config — GDL2
+# ============================================================
+# Path names and FCLM function IDs auto-discover at runtime from this site's
+# FCLM functionRollup response, so function IDs are not required here.
+
+warehouse_id: "GDL2"
+process_id: "1003001"   # standard Pick functionRollup process id; verify if paths don't load
+
+# Rate goals (UPH) — starting values; tune per path on the dashboard.
+rate_expectations:
+  "RF Pick Singles": 50
+  "OrderPickLowDensityP": 20
+  "OrderPickVNA": 35
+  "Orderpicker Pick": 30
+  "OrderPick SIOC": 20
+  "MultiRelayPick": 20
+  "RF Pick": 5
+  "Giftwrap Picking": 5
+
+default_rate_expectation: 5
+
+dashboard:
+  refresh_interval_minutes: 15
+  port: 8787
+
+staffing_evaluator:
+  shift_start_hour: 18
+  shift_start_minute: 0
+  tolerance: 0.05
