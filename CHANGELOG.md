@@ -3,6 +3,19 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.5.3] — 4 more sites
+
+### Added
+- **ACY2, SBD2, FOE1, JVL1** (42 sites total). Health-checked: FCLM paths
+  load and the employee roster resolves logins (100% associate→login match
+  on ACY2, FOE1, and JVL1). SBD2's live 15-minute interval had no fresh rate
+  data at check time, but the FCLM warehouse code is confirmed valid and
+  historical backfill parsed correctly (up to 281 associates/day), so it
+  resolves as data flows in.
+
+### Note
+- LIT2 was also requested but was already present (added in 2.5.0) — skipped.
+
 ## [2.5.2] — 9 more sites (Mexico expansion)
 
 ### Added

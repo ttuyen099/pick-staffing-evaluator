@@ -59,6 +59,10 @@ UPDATE_FILES = [
     "sites/TIJ1.yaml",
     "sites/MEX3.yaml",
     "sites/MTY2.yaml",
+    "sites/ACY2.yaml",
+    "sites/SBD2.yaml",
+    "sites/FOE1.yaml",
+    "sites/JVL1.yaml",
 ]
 
 def get_version_remote():
