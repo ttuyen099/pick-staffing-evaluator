@@ -3,6 +3,12 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.5.4] — 1 more site
+
+### Added
+- **AKR1** (43 sites total). Health-checked: FCLM paths load (15 paths) and
+  the employee roster resolves logins (56/56, 100% associate→login match).
+
 ## [2.5.3] — 4 more sites
 
 ### Added
