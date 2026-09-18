@@ -1,5 +1,5 @@
 ====================================================
-  PickMatrix v2.5.4
+  PickMatrix v2.5.5
   Pick Staffing Evaluator - Multi-Site
   Created & managed by ttuyen
 ====================================================
@@ -60,11 +60,11 @@ CHOOSING YOUR SITE
 
   Defaults to HOU8 if none chosen. Each site keeps its own history and settings.
 
-  Included sites (43):
+  Included sites (44):
     HOU8, CLT3, LAS6, MDT4, MCE1, MDT1, PIT2, ORD2, OKC2, SNA4, MKC4, FAT2,
     SAT4, LGB6, LFT1, MEX6, MEX2, BJX1, PHX7, DEN8, CMH2, GSO1, GDL1, MTY1,
     MTY3, SMF6, LIT2, MDW6, CHA2, TEB3, CMH3, GDL2, HMO3, MID1, MEX1, TIJ1,
-    MEX3, MTY2, ACY2, SBD2, FOE1, JVL1, AKR1
+    MEX3, MTY2, ACY2, SBD2, FOE1, JVL1, AKR1, PDX7
 
   Add another site: copy sites\CLT3.yaml to sites\<YOURFC>.yaml, set
   warehouse_id (and process_id if different). It appears in the dropdown.
@@ -150,5 +150,5 @@ FILES IN THIS FOLDER:
 
 
 ====================================================
-  PickMatrix v2.5.4 | ttuyen | Multi-Site Pick Operations
+  PickMatrix v2.5.5 | ttuyen | Multi-Site Pick Operations
 ====================================================

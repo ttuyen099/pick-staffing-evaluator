@@ -3,6 +3,15 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.5.5] — 1 more site
+
+### Added
+- **PDX7** (44 sites total). Health-checked: Midway auth OK, FCLM
+  functionRollup responds (HTTP 200) for PDX7 with processId 1003001, and
+  rate rows parse — 12 pick paths returned live data on a full-day probe
+  (e.g. OrderPickVNA 41.65 UPH / 9,777 units, Orderpicker Pick 40.17 UPH,
+  RF Pick Carousel 30.03 UPH). Path names auto-discover from FCLM as designed.
+
 ## [2.5.4] — 1 more site
 
 ### Added
