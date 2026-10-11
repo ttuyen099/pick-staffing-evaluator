@@ -18,6 +18,18 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
+
+class FCLMAuthError(Exception):
+    """
+    The Midway/FCLM session is missing or expired.
+
+    Raised by the permission checkers instead of returning an empty result so
+    callers can tell "this associate has NO cross-training permissions" apart
+    from "we could not check" - the two look identical as an empty set, and
+    caching the latter as the former makes the X-Train tab silently wrong for
+    the rest of the shift.
+    """
+
 # ============================================================
 # VERIFIED Training Certificates (Layer 2 - grants permissions)
 # ============================================================
@@ -266,7 +278,7 @@ def check_fclm_permissions(employee_id, config):
 
     cookies = get_midway_cookies(config)
     if not cookies:
-        return set()
+        raise FCLMAuthError("no Midway cookies available")
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
@@ -281,15 +293,40 @@ def check_fclm_permissions(employee_id, config):
             session.cookies.set(name, value, domain="midway-auth.amazon.com")
 
         response = session.get(url, headers=headers, timeout=15)
+        _raise_if_auth_failed(response)
 
         if response.status_code != 200:
-            return set()
+            # Transient/server-side problem: unknown, not "no permissions".
+            raise requests.RequestException(f"HTTP {response.status_code}")
 
         return _parse_permissions_html(response.text)
 
-    except Exception as e:
+    except requests.RequestException as e:
         logger.warning("Error checking permissions for %s: %s", employee_id, e)
-        return set()
+        raise
+
+
+def _raise_if_auth_failed(response):
+    """
+    Raise FCLMAuthError if this FCLM response indicates the Midway session is
+    not valid. Two signatures:
+      * HTTP 401/403.
+      * An SSO bounce: the final URL (after redirects) is on midway-auth, or
+        the body is Midway's login page. These typically come back as 200, so
+        status alone is not enough.
+    """
+    if response.status_code in (401, 403):
+        raise FCLMAuthError(f"HTTP {response.status_code}")
+    final_url = (getattr(response, "url", "") or "").lower()
+    if "midway-auth.amazon.com" in final_url:
+        raise FCLMAuthError("redirected to Midway login")
+    for h in getattr(response, "history", []) or []:
+        if "midway-auth.amazon.com" in (h.headers.get("Location", "") or "").lower():
+            raise FCLMAuthError("redirected to Midway login")
+    head = (response.text or "")[:4000].lower()
+    if "midway" in head and ("sign in" in head or "authenticate" in head or "login" in head):
+        if "employee" not in head and "permission" not in head:
+            raise FCLMAuthError("Midway login page returned")
 
 
 def batch_check_fclm_permissions(employee_ids, config):
@@ -299,7 +336,16 @@ def batch_check_fclm_permissions(employee_ids, config):
     Much faster than calling check_fclm_permissions for each one individually
     because it extracts cookies once and reuses the HTTP session.
     
-    Returns: dict of employee_id -> sorted list of department names
+    Returns: dict of employee_id -> sorted list of department names. Only
+    associates that were successfully checked AND have at least one permission
+    appear in the result.
+
+    Raises:
+        FCLMAuthError  if the Midway session is missing/expired. Raised on the
+                       FIRST associate that fails auth - there is no point
+                       hammering FCLM for the rest of the roster, and the caller
+                       needs to know these associates were NOT checked so it can
+                       retry them later rather than caching "no permissions".
     """
     import requests
     import urllib3
@@ -312,7 +358,7 @@ def batch_check_fclm_permissions(employee_ids, config):
     cookies = get_midway_cookies(config)
     if not cookies:
         logger.error("No cookies available for batch permissions check")
-        return {}
+        raise FCLMAuthError("no Midway cookies available")
     
     # Build a single reusable session
     session = requests.Session()
@@ -327,23 +373,40 @@ def batch_check_fclm_permissions(employee_ids, config):
     
     warehouse_id = config.get('warehouse_id', 'HOU8')
     results = {}
+    transient_failures = 0
     
     for i, eid in enumerate(employee_ids):
         try:
             url = f"https://fclm-portal.amazon.com/employee/permissions?employeeId={eid}&warehouseId={warehouse_id}"
             response = session.get(url, timeout=15)
+            _raise_if_auth_failed(response)   # FCLMAuthError propagates out
             
             if response.status_code == 200:
                 perms = _parse_permissions_html(response.text)
                 if perms:
                     results[eid] = sorted(perms)
+            else:
+                transient_failures += 1
+                logger.warning("  HTTP %d checking %s (will not be cached)", response.status_code, eid)
             
             if (i + 1) % 10 == 0:
                 logger.info("  Checked %d/%d associates...", i + 1, len(employee_ids))
                 
-        except Exception as e:
+        except FCLMAuthError:
+            logger.error(
+                "Midway session invalid while checking permissions for %s "
+                "(%d/%d done). Re-authenticate at https://fclm-portal.amazon.com. "
+                "The remaining associates will be re-checked once auth is restored.",
+                eid, i, len(employee_ids),
+            )
+            raise
+        except requests.RequestException as e:
+            transient_failures += 1
             logger.warning("  Failed for %s: %s", eid, e)
     
+    if transient_failures:
+        logger.warning("  %d/%d permission checks failed transiently (not cached as 'no permissions').",
+                       transient_failures, len(employee_ids))
     return results
 
 

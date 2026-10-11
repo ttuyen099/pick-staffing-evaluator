@@ -74,20 +74,36 @@ if %errorlevel% neq 0 (
 
 :: Check for updates. Only update when the GitHub version is STRICTLY NEWER
 :: than the local version, so a newer local build is never overwritten.
+::
+:: Exit codes from the check:  1 = update available   0 = up to date / check failed
+:: Any failure (offline, proxy, bad response) deliberately maps to 0 = "skip the
+:: update and just start" - an update must never be FORCED by a failed check.
+::
+:: Uses raw.githubusercontent.com (CDN, no per-IP limit) rather than
+:: api.github.com, which is capped at 60 req/hour per public IP - a limit the
+:: whole building shares behind the FC's NAT and exhausts within minutes.
 echo   Checking for updates...
-"%PYTHON%" -c "import requests,base64;r=requests.get('https://api.github.com/repos/ttuyen099/pick-staffing-evaluator/contents/version.txt',timeout=5);remote=base64.b64decode(r.json()['content']).decode().strip();local=open('version.txt').read().strip();rt=tuple(int(x) for x in remote.split('.'));lt=tuple(int(x) for x in local.split('.'));exit(1 if rt>lt else 0)" >nul 2>&1
+:: NOTE: this line must not contain a literal ^> or ^< - cmd treats them as
+:: redirection even inside the Python string. The comparison uses tuple.__gt__.
+"%PYTHON%" -c "import sys,time,requests;exec(\"try:\n r=requests.get('https://raw.githubusercontent.com/ttuyen099/pick-staffing-evaluator/main/version.txt?t='+str(int(time.time())),timeout=5)\n if r.status_code!=200: sys.exit(0)\n rt=tuple(int(x) for x in r.text.strip().split('.'))\n lt=tuple(int(x) for x in open('version.txt').read().strip().split('.'))\n sys.exit(int(rt.__gt__(lt)))\nexcept SystemExit: raise\nexcept Exception: sys.exit(0)\")" >nul 2>&1
 set "NEEDUPDATE=%errorlevel%"
 :: Self-heal: if the per-site configs folder is missing, force an update so
 :: users get their site in the dropdown even when the version already matches.
 if not exist "sites\HOU8.yaml" set "NEEDUPDATE=1"
+:: The updater exits non-zero and leaves the install untouched if ANY file
+:: failed to download, so only report success (and re-run for the new file
+:: list) when the first pass actually completed. The second pass lets a
+:: freshly-downloaded updater.py apply its OWN newer file list in the same
+:: session - how new files reach users whose old updater didn't know about them.
 if "%NEEDUPDATE%" neq "0" (
     echo   Update found! Downloading...
     "%PYTHON%" updater.py
-    :: Run again so a freshly-downloaded updater.py applies its OWN (newer) file
-    :: list in the same session — this is how the sites\ folder reaches users who
-    :: were on an older updater that didn't know about per-site configs yet.
-    "%PYTHON%" updater.py
-    echo   Updated!
+    if errorlevel 1 (
+        echo   Update could not be completed - starting with the current version.
+    ) else (
+        "%PYTHON%" updater.py
+        echo   Updated!
+    )
 )
 
 echo.

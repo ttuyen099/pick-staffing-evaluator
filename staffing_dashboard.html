@@ -510,7 +510,9 @@
         `;
         
         // Add status indicators for X-Train and History
-        const xtStatus = data.xtrain_status==='ready' ? `<span style="color:#4ade80;">&#10003; ${data.xtrain_count} verified</span>` : `<span style="color:#fbbf24;">&#9696; Verifying permissions...</span>`;
+        const xtStatus = data.xtrain_status==='ready' ? `<span style="color:#4ade80;">&#10003; ${data.xtrain_count} verified</span>`
+            : data.xtrain_status==='auth_expired' ? `<span style="color:#ff453a;" title="Permission checks are paused until you re-authenticate. They resume automatically.">&#9888; Midway session expired &mdash; re-login to FCLM in Firefox</span>`
+            : `<span style="color:#fbbf24;">&#9696; Verifying permissions...</span>`;
         const bfStatus = data.backfill_status==='done' ? `<span style="color:#4ade80;">&#10003; Up to date</span>` : data.backfill_status==='running' ? `<span style="color:#fbbf24;">&#9696; ${data.backfill_progress||'Collecting...'}</span>` : `<span style="color:#98989d;">Idle</span>`;
         document.getElementById('summary').innerHTML += `
             <div style="display:flex;gap:16px;width:100%;margin-top:6px;font-size:0.65rem;">
@@ -551,7 +553,7 @@
         }
         tabsHtml += `<div class="path-tab ${selectedPath==='attrition'?'active':''}" onclick="selectPath('attrition')" style="border-color:#ff950050;">Attrition<span class="tab-rate">${getAttrition().length}</span></div>`;
         tabsHtml += `<div class="path-tab ${selectedPath==='idle'?'active':''}" onclick="selectPath('idle')" style="border-color:#ff453a50;">Idle<span class="tab-rate" id="idleTabCount">${((data.idle&&data.idle.flagged)||[]).length} flagged</span></div>`;
-        tabsHtml += `<div class="path-tab ${selectedPath==='xtrain'?'active':''}" onclick="selectPath('xtrain')" style="margin-left:auto;border-color:#007aff50;">X-Train ${data.xtrain_status==='ready'?'<span style=\"color:#4ade80;\">&#10003; '+data.xtrain_count+'</span>':'<span style=\"color:#fbbf24;\">&#9696; verifying...</span>'}</div>`;
+        tabsHtml += `<div class="path-tab ${selectedPath==='xtrain'?'active':''}" onclick="selectPath('xtrain')" style="margin-left:auto;border-color:#007aff50;">X-Train ${data.xtrain_status==='ready'?'<span style=\"color:#4ade80;\">&#10003; '+data.xtrain_count+'</span>':data.xtrain_status==='auth_expired'?'<span style=\"color:#ff453a;\" title=\"Midway session expired - re-login to FCLM\">&#9888; re-login</span>':'<span style=\"color:#fbbf24;\">&#9696; verifying...</span>'}</div>`;
         document.getElementById('pathTabs').innerHTML = tabsHtml;
 
         // Path cards
@@ -1421,15 +1423,20 @@
     </script>
 <div style="text-align:center;padding:12px;font-size:0.6rem;color:#636366;border-top:1px solid #38383a;margin-top:20px;">PickMatrix <span id="footerVer" id="footerVer"></span> | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>
 <script>
-// Check for updates on load
-fetch('https://api.github.com/repos/ttuyen099/pick-staffing-evaluator/contents/version.txt')
-.then(r=>r.json()).then(j=>{
-    const remote=atob(j.content).trim();
+// Check for updates on load.
+// Uses raw.githubusercontent.com (CDN, no per-IP API rate limit) instead of
+// api.github.com, which is capped at 60 req/hr/IP and shared by every user
+// behind the FC's NAT. Versions are compared numerically, not as strings
+// ("2.5.10" must beat "2.5.9").
+function verTuple(v){return String(v||'').trim().split('.').map(x=>parseInt(x,10)||0);}
+function verNewer(a,b){const x=verTuple(a),y=verTuple(b);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d!==0)return d>0;}return false;}
+fetch('https://raw.githubusercontent.com/ttuyen099/pick-staffing-evaluator/main/version.txt?t='+Date.now(),{cache:'no-store'})
+.then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(remoteRaw=>{
+    const remote=remoteRaw.trim();
     fetch('/version.txt?t='+Date.now()).then(r=>r.text()).then(localVer=>{
         localVer=localVer.trim();
         const el=document.getElementById('updateStatus');
-        if(remote===localVer) el.innerHTML='<span style="color:#4ade80;">&#10003; Up to date</span>';
-        else if(remote>localVer) el.innerHTML='<span style="color:#ff9500;">Update v'+remote+' available </span><button onclick="runUpdate()" style="background:#ff9500;color:#fff;border:none;padding:3px 10px;border-radius:4px;font-size:0.6rem;cursor:pointer;font-weight:600;">Update Now</button>';
+        if(verNewer(remote,localVer)) el.innerHTML='<span style="color:#ff9500;">Update v'+remote+' available </span><button onclick="runUpdate()" style="background:#ff9500;color:#fff;border:none;padding:3px 10px;border-radius:4px;font-size:0.6rem;cursor:pointer;font-weight:600;">Update Now</button>';
         else el.innerHTML='<span style="color:#4ade80;">&#10003; Up to date</span>';
     });
 }).catch(()=>{document.getElementById('updateStatus').textContent='';});

@@ -19,7 +19,7 @@ import logging
 import threading
 import webbrowser
 from datetime import datetime, timedelta
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 import yaml
@@ -344,6 +344,10 @@ class DataManager:
         self.raw_html = None  # Store raw HTML for associate parsing
         self.lock = threading.Lock()
         self._cached_permissions = {}  # identifier -> permissions (refreshed in background)
+        # Set when the last permission check failed because the Midway session
+        # was invalid; cleared on the next successful check. Surfaced to the UI
+        # so "Verifying..." doesn't spin forever during an auth outage.
+        self._perms_auth_expired = False
         # Every identifier we've ATTEMPTED to verify (even if it returned no
         # permissions), so we don't re-check the same people every 30s push.
         self._perms_attempted = set()
@@ -509,11 +513,27 @@ class DataManager:
         def _do_check():
             try:
                 logger.info("Background: verifying permissions for %d new identifiers...", len(pending))
-                from cross_training import batch_check_fclm_permissions
-                result = batch_check_fclm_permissions(list(pending), self.config)
+                from cross_training import batch_check_fclm_permissions, FCLMAuthError
+                try:
+                    result = batch_check_fclm_permissions(list(pending), self.config)
+                except FCLMAuthError as e:
+                    # Midway session is dead. These identifiers were NOT checked -
+                    # do not let them sit in _perms_attempted looking like "no
+                    # permissions". Un-mark them so the next console push retries
+                    # once the user re-authenticates, and tell the UI why.
+                    logger.error(
+                        "Permission verification halted - Midway session invalid (%s). "
+                        "Re-authenticate at https://fclm-portal.amazon.com in Firefox; "
+                        "%d identifiers will be re-checked automatically.", e, len(pending)
+                    )
+                    self._perms_auth_expired = True
+                    with self._perms_lock:
+                        self._perms_attempted -= pending
+                    return
                 merged = dict(self._cached_permissions)
                 merged.update(result)  # only found-perms are returned; that's fine
                 self._cached_permissions = merged
+                self._perms_auth_expired = False
                 logger.info(
                     "Background: verified %d/%d had permissions; cache now %d",
                     len(result), len(pending), len(merged)
@@ -981,8 +1001,17 @@ class DataManager:
         return {"total": len(total), "active": len(active), "inactive": len(inactive)}
     
     def get_data(self):
-        """Get the current cached data."""
-        return self.current_data
+        """
+        Get the current cached data.
+
+        Returns a shallow copy: request handlers inject per-request fields
+        (workforce, idle summary, etc.) into the returned dict, and with
+        ThreadingHTTPServer several requests can run concurrently. Handing out
+        the shared dict would let one request mutate it while another is
+        serializing it ("dictionary changed size during iteration").
+        """
+        data = self.current_data
+        return dict(data) if data is not None else None
 
     def bridge_employee_logins(self):
         """
@@ -1171,8 +1200,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 # Refresh login map so console-bridged logins (e.g. new CLT3 pickers)
                 # show up without waiting for the next FCLM fetch.
                 current["eid_to_login"] = data_manager._eid_to_login_combined()
-                # Add permissions loading status
-                current["xtrain_status"] = "ready" if len(data_manager._cached_permissions) > 0 else "loading"
+                # Add permissions loading status. 'auth_expired' wins over
+                # 'loading' so the UI can tell the user to re-login instead of
+                # showing a spinner forever.
+                if data_manager._perms_auth_expired:
+                    current["xtrain_status"] = "auth_expired"
+                else:
+                    current["xtrain_status"] = "ready" if len(data_manager._cached_permissions) > 0 else "loading"
                 current["xtrain_count"] = len(data_manager._cached_permissions)
                 # Always inject latest permissions (they load in background)
                 if data_manager._cached_permissions:
@@ -1307,7 +1341,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
     
     def _handle_verify_permissions(self):
         """Verify actual FCLM permissions for a specific associate."""
-        from cross_training import check_fclm_permissions
+        from cross_training import check_fclm_permissions, FCLMAuthError
         
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length).decode()
@@ -1323,8 +1357,20 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": "Provide employee_id or login"}).encode())
                 return
             
-            perms = check_fclm_permissions(lookup, data_manager.config)
+            try:
+                perms = check_fclm_permissions(lookup, data_manager.config)
+            except FCLMAuthError as e:
+                data_manager._perms_auth_expired = True
+                self._set_headers("application/json", 401)
+                self.wfile.write(json.dumps({
+                    "success": False,
+                    "error": "Midway session expired - re-login to FCLM in Firefox and retry.",
+                    "auth_expired": True,
+                    "detail": str(e),
+                }).encode())
+                return
             
+            data_manager._perms_auth_expired = False
             self._set_headers("application/json")
             self.wfile.write(json.dumps({
                 "success": True,
@@ -1719,15 +1765,20 @@ class DashboardHandler(BaseHTTPRequestHandler):
             updater_path = os.path.join(script_dir, "updater.py")
             python_exe = sys.executable
             
-            # Run updater
+            # Run updater. It exits non-zero (and leaves the install untouched)
+            # if any file failed to download, so surface that honestly.
             result = subprocess.run(
                 [python_exe, updater_path],
                 cwd=script_dir,
-                capture_output=True, text=True, timeout=30
+                capture_output=True, text=True, timeout=60
             )
             
-            self._set_headers("application/json")
-            self.wfile.write(json.dumps({"success": True, "output": result.stdout}).encode())
+            ok = result.returncode == 0
+            self._set_headers("application/json", 200 if ok else 500)
+            self.wfile.write(json.dumps({
+                "success": ok,
+                "output": (result.stdout or "") + (result.stderr or ""),
+            }).encode())
             
         except Exception as e:
             self._set_headers("application/json", 500)
@@ -1857,8 +1908,15 @@ def main():
     # Initialize data manager
     data_manager = DataManager(config, eval_config)
     
-    # Start HTTP server FIRST so the dashboard page can load immediately
-    server = HTTPServer(("localhost", port), DashboardHandler)
+    # Start HTTP server FIRST so the dashboard page can load immediately.
+    # ThreadingHTTPServer: each request gets its own thread, so a slow
+    # synchronous FCLM fetch (/api/refresh, set-time-range, set-shift) no
+    # longer stalls the page load, /api/data polls, or the Tampermonkey
+    # /api/update-workforce headcount push (which has a short client timeout).
+    # Shared state is protected by DataManager.lock (fetch) and copy-on-write
+    # attribute rebinds (workforce), and get_data() returns a per-request copy.
+    server = ThreadingHTTPServer(("localhost", port), DashboardHandler)
+    server.daemon_threads = True
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     

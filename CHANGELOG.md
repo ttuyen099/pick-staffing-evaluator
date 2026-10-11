@@ -3,6 +3,61 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.5.7] — Reliability release
+
+Four fixes to the plumbing every other feature depends on. No visible UI
+changes except one new status message.
+
+### Fixed
+- **Dashboard no longer freezes during FCLM fetches.** The server now handles
+  requests concurrently (`ThreadingHTTPServer`). Previously a manual refresh,
+  time-range change, or shift change blocked *every* other request — the page,
+  `/api/data` polls, and the OB Pick Center headcount push — for the full
+  duration of the FCLM round-trip. The add-on's short timeout meant those
+  pushes were silently dropped, which is one cause of HC showing `--`.
+  Verified: 12 simultaneous requests complete in ~3s with 11 overlapping
+  (previously ~24s serialized).
+- **Auto-updater can no longer leave a half-updated install.** All ~57 files
+  are now downloaded to a staging folder first; if *any* file fails, the
+  install is left completely untouched and the updater exits non-zero.
+  Files are moved into place atomically, and **`version.txt` is written last**.
+  Previously files were overwritten one at a time (truncate-then-write) with
+  `version.txt` as item #8 of ~60 — a network drop after that point left the
+  code partially old while the version said "new", so the launcher's
+  "only update if newer" check would skip the repair forever. Errors are now
+  reported per file instead of swallowed by bare `except: pass`.
+- **Update check no longer hits GitHub's rate-limited API.** `Start
+  Dashboard.bat` and the in-dashboard "Update available" badge both read
+  `version.txt` from `raw.githubusercontent.com` (CDN, no per-IP cap) instead
+  of `api.github.com` (60 requests/hour per public IP — shared by every user
+  behind the FC's NAT). When the old check was rate-limited or offline it
+  threw, which the bat misread as "update needed" and **forced a full
+  re-download on every launch**. Any check failure now means "skip the update
+  and just start." Versions are compared numerically (2.5.10 > 2.5.9). The
+  launcher also skips the second updater pass and prints a clear message if
+  the first pass failed.
+- **Latent `cmd` bug in the launcher's version check.** The Python one-liner
+  contained a literal `>` (`rt>lt`) which `cmd.exe` treats as output
+  redirection even inside the quoted string — it silently created a stray
+  file named `lt` and broke the comparison. Rewritten without `<`/`>`.
+- **Expired Midway session is no longer reported as "no cross-training."**
+  `cross_training.py` now raises `FCLMAuthError` on 401/403, on a redirect to
+  `midway-auth`, or when FCLM returns its login page — instead of returning an
+  empty set that was indistinguishable from "this associate has no
+  permissions" and got cached for the rest of the shift. The batch check stops
+  on the first auth failure (no point hammering the roster), the unchecked
+  associates are queued for automatic retry once auth is restored, and the
+  X-Train status now reads **"⚠ Midway session expired — re-login to FCLM"**
+  instead of spinning on "Verifying permissions…". Transient 5xx / connection
+  errors are skipped and *not* cached either. The in-app "Update Now" button
+  now reports real success/failure based on the updater's exit code.
+
+### Internal
+- `DataManager.get_data()` returns a per-request shallow copy so concurrent
+  handlers don't mutate the shared dict while another is serializing it.
+- `updater.py` operates relative to its own directory (`INSTALL_DIR`) rather
+  than the caller's CWD, and retries transient 5xx/429 twice.
+
 ## [2.5.6] — Idle "By Associate" table: sorting + sortable Status column
 
 ### Changed
