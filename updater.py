@@ -16,6 +16,7 @@ UPDATE_FILES = [
     "rate_history.py",
     "learning_engine.py",
     "login_lookup.py",
+    "idle_time.py",
     "version.txt",
     "updater.py",
     "Start Dashboard.bat",

@@ -505,6 +505,7 @@
                 <div class="hc-part"><span class="hc-num inactive">${phc?phc.inactive:'--'}</span><span class="hc-sub">Inactive</span></div>
             </div><div class="chip-lbl">Pick HC</div></div>
             <div class="chip"><div class="chip-val" style="color:#ff9500;">${getAttrition().length}</div><div class="chip-lbl">Attrition${(()=>{const a=getAttrition();if(!a.length)return '';const byTime={};a.forEach(x=>{const t=x.departing||'?';byTime[t]=(byTime[t]||0)+1;});return '<br><span style=\"font-size:0.55rem;color:#98989d;\">'+Object.entries(byTime).map(([t,c])=>c+' @ '+t).join(', ')+'</span>';})()}</div></div>
+            <div class="chip"><div class="chip-val" style="color:#ff453a;" id="idleChipCount">${((data.idle&&data.idle.flagged)||[]).length}</div><div class="chip-lbl">Idle Flagged${(()=>{const i=data.idle;if(!i)return '';const t=i.threshold_min||30;return '<br><span style=\"font-size:0.55rem;color:#98989d;\">&ge; '+t+' min gap</span>';})()}</div></div>
             <div class="chip" style="margin-left:auto;"><div class="chip-val" style="font-size:0.85rem;color:#98989d;">${data.timestamp||'--'}</div><div class="chip-lbl">Last Updated</div></div>
         `;
         
@@ -549,6 +550,7 @@
             tabsHtml += `<div class="path-tab ${isActive?'active':''} ${p.hitting?'hitting':'missing'}" onclick="selectPath('${p.name}')">${p.name}<span class="tab-rate">${hcLabel} HC</span></div>`;
         }
         tabsHtml += `<div class="path-tab ${selectedPath==='attrition'?'active':''}" onclick="selectPath('attrition')" style="border-color:#ff950050;">Attrition<span class="tab-rate">${getAttrition().length}</span></div>`;
+        tabsHtml += `<div class="path-tab ${selectedPath==='idle'?'active':''}" onclick="selectPath('idle')" style="border-color:#ff453a50;">Idle<span class="tab-rate" id="idleTabCount">${((data.idle&&data.idle.flagged)||[]).length} flagged</span></div>`;
         tabsHtml += `<div class="path-tab ${selectedPath==='xtrain'?'active':''}" onclick="selectPath('xtrain')" style="margin-left:auto;border-color:#007aff50;">X-Train ${data.xtrain_status==='ready'?'<span style=\"color:#4ade80;\">&#10003; '+data.xtrain_count+'</span>':'<span style=\"color:#fbbf24;\">&#9696; verifying...</span>'}</div>`;
         document.getElementById('pathTabs').innerHTML = tabsHtml;
 
@@ -574,10 +576,15 @@
                     <tbody>${attrList.length>0?attrList.map((a,i)=>`<tr><td style="color:#ffffff;">${a.login}</td><td style="color:#ff9500;font-weight:600;">${a.departing||'--'}</td><td style="color:#98989d;">${a.time}</td><td><button onclick="removeAttrition(${i})" style="background:#3a3a3c;color:#ff453a;border:1px solid #48484a;border-radius:4px;padding:2px 8px;font-size:0.65rem;cursor:pointer;">X</button></td></tr>`).join(''):'<tr><td colspan="4" style="color:#636366;text-align:center;padding:20px;">No attrition logged this shift</td></tr>'}</tbody>
                 </table>
             </div>`;
+        } else if(selectedPath==='idle'){
+            // Idle-time view. The inner panel is built by buildIdlePanel() so a
+            // lightweight 5s poller can refresh just this panel in place while a
+            // scan is running (see startIdlePoll). The #idlePanel wrapper is the
+            // live-updated target.
+            html=`<div id="idlePanel">${buildIdlePanel(data.idle)}</div>`;
         } else if(selectedPath==='xtrain'){
             // X-Train Lookup view
-            const ctMap=data.cross_training_by_employee_id||{};
-            html=`<div style="background:rgba(44,44,46,0.95);border:1px solid #38383a;border-radius:12px;padding:20px;">
+            const ctMap=data.cross_training_by_employee_id||{};            html=`<div style="background:rgba(44,44,46,0.95);border:1px solid #38383a;border-radius:12px;padding:20px;">
                 <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
                     <h3 style="color:#fff;font-size:1rem;">Cross-Training Lookup</h3>
                     <input type="text" id="xtrainSearch" placeholder="Search login or name..." oninput="filterXtrain()" style="flex:1;max-width:300px;background:#1c1c1e;border:1px solid #38383a;color:#e0e0e0;padding:8px 12px;border-radius:5px;font-size:0.8rem;">
@@ -729,6 +736,13 @@
         if (cols) cols.classList.toggle('single', !!selectedPath);
 
         renderMoveLog();
+
+        // Keep the Idle chip/panel live: if a scan is in progress (or the Idle
+        // tab is open), ensure the 5s poller is running. It self-stops when the
+        // scan finishes and the Idle tab isn't open.
+        if ((data.idle && data.idle.scanning) || selectedPath === 'idle') {
+            startIdlePoll();
+        }
     }
 
     // ============================================================
@@ -893,7 +907,207 @@
         if(el) el.classList.toggle('open');
     }
 
-    function selectPath(name) { selectedPath = name; render(); }
+    function selectPath(name) {
+        selectedPath = name;
+        render();
+        // Manage the idle poller. On the Idle tab, always poll (live panel).
+        // On other tabs, keep polling only while a scan is still running so the
+        // summary chip updates live; otherwise stop.
+        if (name === 'idle') {
+            startIdlePoll();
+        } else if (!(data && data.idle && data.idle.scanning)) {
+            stopIdlePoll();
+        }
+    }
+
+    // ============================================================
+    // Idle panel — reusable builder + lightweight live poller.
+    // While the Idle tab is open AND a scan is running, we poll the small
+    // /api/idle endpoint every 5s and refresh ONLY the #idlePanel contents,
+    // so results tick in live without a full /api/data round-trip.
+    // ============================================================
+    // Tracks which associate rows are expanded (by employee_id/login) so the
+    // breakdown stays open across the 5s panel re-renders.
+    const _idleExpanded = new Set();
+    function toggleIdleRow(key) {
+        if (_idleExpanded.has(key)) _idleExpanded.delete(key);
+        else _idleExpanded.add(key);
+        // Re-render just the idle panel in place.
+        const panel = document.getElementById('idlePanel');
+        if (panel && data && data.idle) panel.innerHTML = buildIdlePanel(data.idle);
+    }
+
+    // Status-column sort for the "By Associate" idle table.
+    //   null       -> server order (default)
+    //   'need'     -> Need STU first, then Good
+    //   'good'     -> Good first, then Need STU
+    // Double-clicking the Status header cycles need -> good -> need.
+    let _idleStatusSort = null;
+    function sortIdleByStatus() {
+        _idleStatusSort = (_idleStatusSort === 'need') ? 'good' : 'need';
+        const panel = document.getElementById('idlePanel');
+        if (panel && data && data.idle) panel.innerHTML = buildIdlePanel(data.idle);
+    }
+
+    function buildIdlePanel(idleData) {
+        const idle = idleData || {threshold_min:30, flagged:[], all:[], by_path:[], last_scan:null, scanning:false};
+        const thr = idle.threshold_min || 30;
+        const flagged = (idle.flagged || []);
+        const all = (idle.all || []);
+        // Optional client-side sort by Status (double-click the Status header).
+        // Stable sort preserves the server's longest-gap ordering within each
+        // status group. flagged === true means "Need STU", false means "Good".
+        const sortedAll = (() => {
+            if (!_idleStatusSort) return all;
+            const rank = r => {
+                const need = !!r.flagged;  // true = Need STU
+                return (_idleStatusSort === 'need') ? (need ? 0 : 1) : (need ? 1 : 0);
+            };
+            return all
+                .map((r, i) => [r, i])                       // decorate with index
+                .sort((a, b) => (rank(a[0]) - rank(b[0])) || (a[1] - b[1]))
+                .map(pair => pair[0]);                       // stable within group
+        })();
+        const fmt = m => { const x=Math.round(m||0); const h=Math.floor(x/60), mm=x%60; return h>0?(h+'h '+mm+'m'):(mm+'m'); };
+        const scanLbl = idle.scanning
+            ? ('<span style="color:#fbbf24;">&#9696; scanning' + ((idle.scan_total)?(' '+(idle.scan_done||0)+'/'+idle.scan_total):'') + '...</span>')
+            : (idle.last_scan ? '<span style="color:#4ade80;">&#10003; scanned '+idle.last_scan+'</span>' : '<span style="color:#98989d;">not scanned yet</span>');
+        const bpHtml = (()=>{
+            const bp = (idle.by_path || []);
+            if(!bp.length) return '';
+            return `<div style="margin-bottom:18px;">
+                <div style="color:#c7c7cc;font-size:0.72rem;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Idle by Path</div>
+                <table class="assoc-table">
+                    <thead><tr><th>Path</th><th>Total Idle</th><th>Pickers</th><th>Flagged</th></tr></thead>
+                    <tbody>${bp.map(p=>`<tr>
+                        <td style="color:#ffffff;">${p.path}</td>
+                        <td style="color:#c7c7cc;">${fmt(p.idle_min)}</td>
+                        <td style="color:#98989d;">${p.pickers}</td>
+                        <td style="color:${p.flagged_count>0?'#ff453a':'#4ade80'};font-weight:${p.flagged_count>0?'700':'400'};">${p.flagged_count}</td>
+                    </tr>`).join('')}</tbody>
+                </table>
+            </div>`;
+        })();
+        const assocRows = all.length>0
+            ? sortedAll.map(r=>{
+                const f=!!r.flagged;
+                const key = (r.employee_id || r.login || '').toString();
+                const open = _idleExpanded.has(key);
+                const fclm = r.fclm_url
+                    ? `<a href="${r.fclm_url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#0a84ff;text-decoration:none;font-weight:600;" title="Open FCLM Time Details for ${r.login||r.employee_id||''}">FCLM &#8599;</a>`
+                    : '<span style="color:#48484a;">—</span>';
+                // Shares of TOTAL SHIFT time: green=productive, red=idle, the
+                // dark remainder = indirect/other (meetings/training/etc).
+                const ip = (typeof r.idle_pct==='number')?r.idle_pct:0;
+                const pp = (typeof r.prod_pct==='number')?r.prod_pct:0;
+                const pctBar = `<div style="display:flex;align-items:center;gap:8px;">
+                    <div style="flex:1;min-width:70px;height:8px;border-radius:4px;overflow:hidden;background:#2c2c2e;display:flex;">
+                        <div style="width:${pp}%;background:#30d158;"></div>
+                        <div style="width:${ip}%;background:#ff453a;"></div>
+                    </div>
+                    <span style="color:${ip>=50?'#ff453a':'#c7c7cc'};font-size:0.72rem;min-width:38px;text-align:right;">${ip.toFixed(0)}%</span>
+                </div>`;
+                const caret = (r.gaps && r.gaps.length)
+                    ? `<span style="display:inline-block;width:12px;color:#8e8e93;transform:rotate(${open?90:0}deg);transition:transform .15s;">&#9654;</span>`
+                    : '<span style="display:inline-block;width:12px;"></span>';
+                const mainRow = `<tr onclick="toggleIdleRow('${key}')" style="cursor:${(r.gaps&&r.gaps.length)?'pointer':'default'};">
+                    <td style="color:#ffffff;">${caret} ${r.login||'—'}</td>
+                    <td style="color:${f?'#ff453a':'#98989d'};font-weight:${f?'700':'400'};">${fmt(r.idle_min)}</td>
+                    <td style="color:#c7c7cc;">${fmt(r.shift_min)}</td>
+                    <td style="min-width:120px;">${pctBar}</td>
+                    <td>${f?'<span style="color:#ff453a;font-weight:600;">&#9888; Need STU</span>':'<span style="color:#4ade80;">Good</span>'}</td>
+                    <td>${fclm}</td>
+                </tr>`;
+                // Expanded detail: this AA's idle gaps, highest -> lowest.
+                let detail = '';
+                if (open && r.gaps && r.gaps.length) {
+                    const gapRows = r.gaps.map((g,i)=>`<tr>
+                        <td style="color:#636366;padding-left:28px;">#${i+1}</td>
+                        <td style="color:${g.minutes>=thr?'#ff453a':'#c7c7cc'};font-weight:${g.minutes>=thr?'700':'400'};">${fmt(g.minutes)}</td>
+                        <td style="color:#98989d;">${g.start} &ndash; ${g.end}</td>
+                        <td style="color:#8e8e93;">${g.path||'—'}</td>
+                    </tr>`).join('');
+                    detail = `<tr><td colspan="6" style="padding:0 0 10px 0;background:#1c1c1e;">
+                        <table class="assoc-table" style="margin:0;background:transparent;">
+                            <thead><tr>
+                                <th style="padding-left:28px;">Gap</th><th>Duration</th><th>Window</th><th>Path</th>
+                            </tr></thead>
+                            <tbody>${gapRows}</tbody>
+                        </table>
+                    </td></tr>`;
+                }
+                return mainRow + detail;
+              }).join('')
+            : `<tr><td colspan="6" style="color:#636366;text-align:center;padding:20px;">${idle.scanning?('Scanning idle time… '+((idle.scan_total)?((idle.scan_done||0)+'/'+idle.scan_total):'')):'No idle data yet — it populates a few seconds after each FCLM pull.'}</td></tr>`;
+        // Shift-wide roll-up: total idle vs total direct across all scanned AAs.
+        const totDirect = all.reduce((s,r)=>s+(r.direct_min||0),0);
+        const totIdle = all.reduce((s,r)=>s+(r.total_idle_min||0),0);
+        const totActive = totDirect + totIdle;
+        const fleetIdlePct = totActive>0 ? (totIdle/totActive*100) : 0;
+        const rollup = all.length>0
+            ? `<div style="display:flex;gap:16px;align-items:center;margin-bottom:14px;flex-wrap:wrap;font-size:0.75rem;">
+                 <span style="color:#98989d;">Shift totals:</span>
+                 <span style="color:#30d158;">Productive ${fmt(totDirect)}</span>
+                 <span style="color:#ff453a;">Idle ${fmt(totIdle)}</span>
+                 <span style="color:${fleetIdlePct>=25?'#ff453a':'#c7c7cc'};font-weight:600;">${fleetIdlePct.toFixed(1)}% idle</span>
+               </div>`
+            : '';
+        return `<div style="background:rgba(44,44,46,0.95);border:1px solid #38383a;border-radius:12px;padding:20px;">
+            <div style="display:flex;gap:12px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
+                <h3 style="color:#ffffff;font-size:1rem;">Idle Time</h3>
+                <span style="color:#ff453a;font-size:0.8rem;font-weight:600;">${flagged.length} flagged &ge; ${thr} min</span>
+                <span style="font-size:0.7rem;">${scanLbl}</span>
+            </div>
+            <div style="color:#98989d;font-size:0.68rem;margin-bottom:14px;">
+                Flags the single longest <b>continuous</b> idle gap — paid on-clock time not covered by a direct pick path.
+                Training / meetings / indirect time is excluded (it is neither idle nor does it bridge a gap).
+            </div>
+            ${bpHtml}
+            <div style="color:#c7c7cc;font-size:0.72rem;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">By Associate</div>
+            ${rollup}
+            <table class="assoc-table">
+                <thead><tr><th>Login</th><th>Longest Gap</th><th>Total Shift</th><th>Idle % of Shift</th><th ondblclick="sortIdleByStatus()" title="Double-click to sort by status" style="cursor:pointer;user-select:none;">Status${_idleStatusSort?('<span style="color:#8e8e93;font-size:0.7em;margin-left:4px;">'+(_idleStatusSort==='need'?'&#9650;':'&#9660;')+'</span>'):''}</th><th>Verify</th></tr></thead>
+                <tbody>${assocRows}</tbody>
+            </table>
+        </div>`;
+    }
+
+    let _idlePollTimer = null;
+    async function pollIdleOnce() {
+        try {
+            const r = await fetch(API + '/api/idle');
+            if (!r.ok) return;
+            const idle = await r.json();
+            // Keep the shared data object in sync so a full render() stays correct,
+            // and update the tab badge / summary chip counts.
+            if (data) data.idle = idle;
+            const flaggedCount = (idle.flagged || []).length;
+            // Live-refresh the Idle panel if the tab is open.
+            const panel = document.getElementById('idlePanel');
+            if (panel && selectedPath === 'idle') {
+                panel.innerHTML = buildIdlePanel(idle);
+            }
+            // Live-refresh the Idle tab badge count (if the tab bar is rendered).
+            const tabBadge = document.getElementById('idleTabCount');
+            if (tabBadge) tabBadge.textContent = flaggedCount + ' flagged';
+            // Live-refresh the Overview summary chip count (visible on any tab).
+            const chip = document.getElementById('idleChipCount');
+            if (chip) chip.textContent = flaggedCount;
+            // Lifecycle: keep polling while a scan is running OR while the Idle
+            // tab is open (so the panel ticks live). Otherwise stop — the 30s
+            // /api/data cycle keeps the chip fresh at rest.
+            if (!idle.scanning && selectedPath !== 'idle') stopIdlePoll();
+        } catch(e) { /* transient; keep polling */ }
+    }
+    function startIdlePoll() {
+        if (_idlePollTimer) return;  // already running
+        // Kick an immediate refresh, then every 5s.
+        pollIdleOnce();
+        _idlePollTimer = setInterval(pollIdleOnce, 5000);
+    }
+    function stopIdlePoll() {
+        if (_idlePollTimer) { clearInterval(_idlePollTimer); _idlePollTimer = null; }
+    }
 
     // Attrition tracking (stored in localStorage per site + shift date)
     let _attritionSite = '';

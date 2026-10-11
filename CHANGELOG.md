@@ -3,6 +3,22 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.5.6] — Idle "By Associate" table: sorting + sortable Status column
+
+### Changed
+- The **Idle → By Associate** table now orders by the **single longest
+  continuous idle gap** (descending), matching the metric the tool actually
+  flags on. Tie-breaks on idle-% of shift, then total idle minutes. Previously
+  it sorted by idle-% alone, which pushed brand-new/short-shift associates
+  (e.g. 5-minute shift at 100%) above people with much larger real idle gaps.
+
+### Added
+- **Double-click the STATUS column header** to group the table by status —
+  "⚠ Need STU" first, or "Good" first. Double-clicking again toggles the
+  direction. A small ▲/▼ arrow in the header shows the active sort. The sort
+  is stable, so each status group keeps the longest-gap ordering. Front-end
+  only; no server restart required (hard-refresh the dashboard).
+
 ## [2.5.5] — 1 more site
 
 ### Added

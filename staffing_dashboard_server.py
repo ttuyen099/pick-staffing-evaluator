@@ -354,6 +354,15 @@ class DataManager:
         self._login_attempted = set()
         self._login_resolving = False
         self._login_lock = threading.Lock()
+        # Idle-time scan (FCLM timeDetails per associate) state + single-flight guard.
+        # employee_id -> {"login","idle_min","flagged"} for the current shift.
+        self._idle_results = {}
+        self._idle_attempted = set()   # employee_ids checked this shift
+        self._idle_scanning = False
+        self._idle_lock = threading.Lock()
+        self._idle_last_scan = None
+        self._idle_scan_total = 0   # associates in the current scan batch
+        self._idle_scan_done = 0    # associates completed in the current batch
         self.active_workforce = {}  # process_path -> list of active logins (from Tampermonkey)
         # Picking Console is the SOLE source of truth for headcount.
         # process_path -> {"total": [...], "active": [...], "inactive": [...]}
@@ -404,6 +413,11 @@ class DataManager:
         """Update the time range for data fetching."""
         self.start_time = start_time
         self.end_time = end_time
+        # A new window means idle must be recomputed for everyone.
+        with self._idle_lock:
+            self._idle_attempted = set()
+            self._idle_results = {}
+            self._idle_last_scan = None
         logger.info("Time range updated: %s to %s", 
                    start_time.strftime("%Y/%m/%d %H:%M"),
                    end_time.strftime("%Y/%m/%d %H:%M"))
@@ -450,6 +464,8 @@ class DataManager:
                 self._refresh_permissions_background()
                 # Resolve any missing logins from FCLM timeDetails (non-blocking)
                 self._resolve_logins_background()
+                # Scan for long continuous idle gaps (non-blocking)
+                self._scan_idle_background()
             
             logger.info("Successfully fetched %d process paths", len(rate_data))
             return True
@@ -553,6 +569,183 @@ class DataManager:
                     self._login_resolving = False
 
         threading.Thread(target=_do, daemon=True).start()
+
+
+    def _idle_threshold_min(self):
+        """Flag threshold (minutes) for a single continuous idle gap."""
+        settings = self.eval_config.get("staffing_evaluator", {}) or {}
+        try:
+            return int(settings.get("idle_threshold_minutes", 30))
+        except (TypeError, ValueError):
+            return 30
+
+    def _scan_idle_background(self):
+        """
+        Scan on-shift associates for a long continuous idle gap via FCLM
+        timeDetails. Mirrors _resolve_logins_background: background thread,
+        single-flight, and we remember who we've already scanned this shift so
+        we don't re-pull every cycle. Results are merged into self._idle_results
+        keyed by employee_id and exposed via /api/idle and /api/data.
+
+        Idle is measured ONLY within direct-path time: indirect/training/meeting
+        spans are excised (see idle_time.compute_idle). We flag the single
+        longest continuous gap at or above the threshold.
+        """
+        if not self.eval_config.get("staffing_evaluator", {}).get("idle_enabled", True):
+            return
+
+        abp = (self.current_data or {}).get("associates_by_path", {})
+        # (employee_id, login_hint) for everyone currently seen in FCLM pick data.
+        candidates = {}
+        for assocs in abp.values():
+            for a in assocs:
+                eid = (a.get("employee_id") or "").strip()
+                if eid:
+                    candidates[eid] = (a.get("login") or "").strip() or None
+
+        with self._idle_lock:
+            # Re-scan the FULL roster each cycle so idle totals ACCUMULATE as the
+            # shift progresses (each scan re-reads shift-start -> now from FCLM).
+            # Single-flight: skip if a scan is already running. Previous results
+            # stay visible until the fresh ones replace them.
+            if self._idle_scanning or not candidates:
+                return
+            pending = dict(candidates)
+            self._idle_scanning = True
+            self._idle_scan_total = len(pending)
+            self._idle_scan_done = 0
+
+        start_dt = self.start_time
+        end_dt = self.end_time
+        threshold = self._idle_threshold_min()
+
+        def _do():
+            try:
+                import idle_time
+                logger.info("Background: scanning idle time for %d associates...", len(pending))
+
+                # Re-key results back to employee_id via the login hint map.
+                hint_to_eid = {}
+                for eid, hint in pending.items():
+                    if hint:
+                        hint_to_eid[hint.lower()] = eid
+
+                # Publish each associate's result as soon as it completes, so the
+                # dashboard fills in incrementally instead of waiting for the
+                # whole batch. Results are merged under a lock (the pool runs
+                # workers concurrently).
+                warehouse_id = self.config.get("warehouse_id", "HOU8")
+
+                def _publish(row):
+                    # scan_idle now returns a complete row: login, employee_id,
+                    # idle metrics, productivity %, and the FCLM link. Key by the
+                    # employee_id it queried (authoritative), falling back to login.
+                    eid = row.get("employee_id") or hint_to_eid.get(
+                        (row.get("login") or "").lower(), row.get("login", ""))
+                    with self._idle_lock:
+                        updated = dict(self._idle_results)
+                        updated[eid] = dict(row)
+                        self._idle_results = updated
+                        self._idle_last_scan = datetime.now()
+                        self._idle_scan_done += 1
+
+                settings = self.eval_config.get("staffing_evaluator", {}) or {}
+                try:
+                    workers = int(settings.get("idle_scan_workers", 8))
+                except (TypeError, ValueError):
+                    workers = 8
+
+                idle_time.scan_idle(
+                    [(eid, hint) for eid, hint in pending.items()],
+                    self.config, start_dt, end_dt,
+                    threshold_min=threshold,
+                    max_workers=workers,
+                    on_result=_publish,
+                )
+                logger.info(
+                    "Background: idle scan complete — %d flagged (>= %d min)",
+                    sum(1 for v in self._idle_results.values() if v.get("flagged")), threshold,
+                )
+            except Exception as e:
+                logger.warning("Idle scan error: %s", e)
+                # Next cycle will re-scan the full roster anyway.
+            finally:
+                with self._idle_lock:
+                    self._idle_scanning = False
+
+        threading.Thread(target=_do, daemon=True).start()
+
+    def idle_summary(self):
+        """
+        Build the idle payload for the dashboard: login + idle minutes + flag,
+        plus a per-path breakdown.
+
+        Returns:
+            {
+              "threshold_min": int,
+              "last_scan": "HH:MM:SS" | None,
+              "scanning": bool,
+              "flagged": [ {login, idle_min}, ... ]  # idle_min desc,
+              "all": [ {login, idle_min, flagged, by_path}, ... ],
+              "by_path": [ {path, idle_min, flagged_count, pickers} ... ]  # idle_min desc
+            }
+
+        Per-path attribution: each associate's idle gaps are attributed to the
+        direct path they were working when the gap began (see
+        idle_time._attribute_gaps_to_paths). The per-path aggregate sums idle
+        minutes per path and counts how many pickers were flagged on each.
+        """
+        results = list(self._idle_results.values())
+        # Longest continuous idle gap first (matches the flagging metric);
+        # tie-break on idle-% of shift, then total idle minutes.
+        results.sort(
+            key=lambda r: (
+                r.get("idle_min", 0),
+                r.get("idle_pct", 0),
+                r.get("total_idle_min", 0),
+            ),
+            reverse=True,
+        )
+        flagged = [{"login": r["login"], "idle_min": r["idle_min"]}
+                   for r in results if r.get("flagged")]
+
+        threshold = self._idle_threshold_min()
+
+        # Aggregate per path.
+        path_agg = {}  # path -> {"idle_min", "flagged_count", "pickers": set}
+        for r in results:
+            for path, pdata in (r.get("by_path") or {}).items():
+                agg = path_agg.setdefault(
+                    path, {"idle_min": 0.0, "flagged_count": 0, "pickers": set()}
+                )
+                agg["idle_min"] += pdata.get("idle_min", 0.0)
+                agg["pickers"].add(r.get("login", ""))
+                # A picker counts as "flagged on this path" if their single
+                # longest gap on this path meets the threshold.
+                if pdata.get("longest_idle_min", 0.0) >= threshold:
+                    agg["flagged_count"] += 1
+
+        by_path = [
+            {
+                "path": path,
+                "idle_min": round(agg["idle_min"], 1),
+                "flagged_count": agg["flagged_count"],
+                "pickers": len([p for p in agg["pickers"] if p]),
+            }
+            for path, agg in path_agg.items()
+        ]
+        by_path.sort(key=lambda x: x["idle_min"], reverse=True)
+
+        return {
+            "threshold_min": threshold,
+            "last_scan": self._idle_last_scan.strftime("%H:%M:%S") if self._idle_last_scan else None,
+            "scanning": self._idle_scanning,
+            "scan_done": self._idle_scan_done,
+            "scan_total": self._idle_scan_total,
+            "flagged": flagged,
+            "all": results,
+            "by_path": by_path,
+        }
 
 
     def _build_url(self):
@@ -917,6 +1110,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._handle_history()
         elif path == "/api/move-log":
             self._handle_move_log()
+        elif path == "/api/idle":
+            self._handle_idle()
         elif path == "/api/move-log/export":
             self._handle_move_log_export()
         elif path == "/api/sites":
@@ -985,6 +1180,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 # Add backfill status
                 current["backfill_status"] = backfill_status.get("state", "unknown")
                 current["backfill_progress"] = backfill_status.get("progress", "")
+                # Idle-time scan (login + idle minutes + flag)
+                current["idle"] = data_manager.idle_summary()
                 payload = json.dumps(current)
                 self._set_headers("application/json")
                 self.wfile.write(payload.encode())
@@ -1160,10 +1357,32 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "path_averages": averages,
         }).encode())
     
+    def _handle_idle(self):
+        """
+        Return the idle-time scan: associates with a long continuous idle gap.
+
+        Response:
+            {
+              "threshold_min": 30,
+              "last_scan": "HH:MM:SS" | null,
+              "scanning": bool,
+              "flagged": [ {"login","idle_min"}, ... ],   # idle_min desc
+              "all":     [ {"login","idle_min","flagged"}, ... ]
+            }
+        Only login + idle minutes (+ flag) are returned, by design.
+        """
+        try:
+            payload = data_manager.idle_summary()
+            self._set_headers("application/json")
+            self.wfile.write(json.dumps(payload).encode())
+        except Exception as e:
+            logger.error("Idle endpoint error: %s", e)
+            self._set_headers("application/json", 500)
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
+
     def _handle_move_log(self):
         """
         Return the picker path-move data log.
-
         Query params (all optional):
             login       - filter to a single picker's login (case-insensitive)
             employee_id - filter by employee id
