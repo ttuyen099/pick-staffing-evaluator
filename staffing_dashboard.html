@@ -4,214 +4,593 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PickMatrix</title>
+    <!-- Typeface: SF Pro where the OS provides it (macOS/iOS, or a local install);
+         otherwise Inter, the open-source SF-equivalent. display=swap renders text
+         immediately in the fallback and swaps in Inter when it arrives, so an
+         offline/blocked network never delays the page. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <style>
+        /* ==========================================================================
+           PickMatrix 2.6.0 — Apple dark design system
+           Tokens follow Apple HIG dark-mode semantics (system colors, label
+           hierarchy, fills, separators) with a spacious, line-by-line reading
+           rhythm. Dark only.
+           ========================================================================== */
+        :root {
+            color-scheme: dark;
+
+            /* Backgrounds (grouped, elevated) */
+            --bg-base:        #000000;
+            --bg-1:           #1c1c1e;   /* secondarySystemBackground */
+            --bg-2:           #2c2c2e;   /* tertiarySystemBackground  */
+            --bg-3:           #3a3a3c;
+
+            /* Materials */
+            --mat-bar:        rgba(28, 28, 30, 0.82);
+            --mat-card:       rgba(28, 28, 30, 0.92);
+            --mat-card-2:     rgba(44, 44, 46, 0.92);
+            --mat-blur:       saturate(180%) blur(20px);
+
+            /* Fills (quaternary -> primary, white alpha) */
+            --fill-1:         rgba(120, 120, 128, 0.36);
+            --fill-2:         rgba(120, 120, 128, 0.32);
+            --fill-3:         rgba(118, 118, 128, 0.24);
+            --fill-4:         rgba(116, 116, 128, 0.18);
+
+            /* Labels */
+            --label-1:        #ffffff;                    /* label            */
+            --label-2:        rgba(235, 235, 245, 0.60);  /* secondaryLabel   */
+            --label-3:        rgba(235, 235, 245, 0.30);  /* tertiaryLabel    */
+            --label-4:        rgba(235, 235, 245, 0.18);  /* quaternaryLabel  */
+
+            /* Separators */
+            --sep:            rgba(84, 84, 88, 0.65);     /* separator        */
+            --sep-opaque:     #38383a;
+            --hairline:       rgba(255, 255, 255, 0.08);
+
+            /* System colors (dark variants) */
+            --blue:           #0a84ff;
+            --green:          #30d158;
+            --red:            #ff453a;
+            --orange:         #ff9f0a;
+            --yellow:         #ffd60a;
+            --pink:           #ff375f;
+            --purple:         #bf5af2;
+            --teal:           #40c8e0;
+            --indigo:         #5e5ce6;
+            --mint:           #63e6e2;
+            --gray:           #8e8e93;
+
+            /* Tinted fills for status pills (system color @ ~16%) */
+            --blue-tint:      rgba(10, 132, 255, 0.16);
+            --green-tint:     rgba(48, 209, 88, 0.16);
+            --red-tint:       rgba(255, 69, 58, 0.16);
+            --orange-tint:    rgba(255, 159, 10, 0.16);
+            --yellow-tint:    rgba(255, 214, 10, 0.16);
+
+            /* Type ramp (SF Pro-ish). Base 15px for data density + legibility. */
+            --fs-caption2:    0.6875rem;  /* 11px */
+            --fs-caption1:    0.75rem;    /* 12px */
+            --fs-footnote:    0.8125rem;  /* 13px */
+            --fs-subhead:     0.9375rem;  /* 15px */
+            --fs-body:        1.0625rem;  /* 17px */
+            --fs-title3:      1.25rem;    /* 20px */
+            --fs-title2:      1.375rem;   /* 22px */
+            --fs-title1:      1.75rem;    /* 28px */
+            --fs-large:       2.125rem;   /* 34px */
+
+            /* Spacing rhythm */
+            --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+            --sp-5: 20px; --sp-6: 24px; --sp-7: 32px; --sp-8: 40px;
+
+            /* Radii */
+            --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 20px; --r-pill: 999px;
+
+            /* Motion */
+            --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+            --dur:  180ms;
+
+            /* Row rhythm for tables (spacious) */
+            --row-pad-y: 13px;
+            --row-pad-x: 14px;
+
+            /* Sticky offsets */
+            --bar-h: 60px;
+            --tabs-top: 60px;
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #000000; color: #ffffff; min-height: 100vh; }
+        html { -webkit-text-size-adjust: 100%; }
+        body {
+            /* SF Pro (local/Apple) -> Inter (web, SF-equivalent) -> OS fallback.
+               "SF Pro Text"/"SF Pro Display" match a user-installed SF Pro on
+               Windows; -apple-system/BlinkMacSystemFont resolve to SF on Apple. */
+            font-family: "SF Pro Text", "SF Pro Display", "SF Pro", -apple-system, BlinkMacSystemFont,
+                         "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg-base);
+            color: var(--label-1);
+            min-height: 100vh;
+            font-size: var(--fs-subhead);
+            line-height: 1.4;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
+            /* tnum: tabular numerals everywhere. cv05/cv08/cv11/ss01 are Inter's
+               SF-style alternates (l with tail, open 4, single-storey a, etc.);
+               they are ignored by fonts that lack them. */
+            font-feature-settings: "tnum" 1, "cv05" 1, "cv08" 1, "cv11" 1, "ss01" 1;
+        }
+        ::selection { background: rgba(10,132,255,0.35); }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-thumb { background: var(--fill-2); border-radius: var(--r-pill); border: 2px solid transparent; background-clip: padding-box; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--fill-1); background-clip: padding-box; border: 2px solid transparent; }
+        ::-webkit-scrollbar-track { background: transparent; }
 
-        /* Control Bar */
-        .control-bar { position: sticky; top: 0; z-index: 100; background: rgba(28,28,30,0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid #38383a; padding: 10px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-        .logo { font-weight: 300; font-size: 1.2rem; color: #ffffff; white-space: nowrap; letter-spacing: -0.5px; }
-        .logo span { color: #007aff; font-weight: 600; }
-        .control-group { display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: #000000; border: 1px solid #38383a; border-radius: 8px; }
-        .control-group label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.5px; color: #98989d; white-space: nowrap; }
-        .control-group input, .control-group select { background: rgba(28,28,30,0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid #38383a; color: #ffffff; padding: 3px 6px; border-radius: 3px; font-size: 0.75rem; font-family: inherit; }
-        .control-group input:focus, .control-group select:focus { outline: none; border-color: #007aff; }
-        .btn { background: #007aff; color: white; border: none; padding: 5px 12px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; font-weight: 500; white-space: nowrap; }
-        .btn:hover { background: #0056b3; }
-        .btn.secondary { background: #3a3a3c; color: #ffffff; }
-        .btn.secondary:hover { background: #4b5563; }
-        .status-area { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: #98989d; margin-left: auto; }
-        .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; animation: pulse 2s infinite; }
-        .status-dot.fetching { background: #fbbf24; animation: none; }
-        .status-dot.error { background: #f87171; animation: none; }
-        .status-dot.off { background: #64748b; animation: none; }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        h3 { font-weight: 600; letter-spacing: -0.01em; }
+        b, strong { font-weight: 600; }
+        button, input, select, textarea { font-family: inherit; font-feature-settings: inherit; }
+        button { cursor: pointer; }
+        a { color: var(--blue); text-decoration: none; }
+        a:hover { text-decoration: underline; text-underline-offset: 2px; }
 
-        /* Main */
-        .main { padding: 16px 20px; }
+        /* Numeric data should always align */
+        .num, td, .chip-val, .pm-val, .hc-num, .rate-pill, .sp-nums { font-variant-numeric: tabular-nums; }
 
-        /* Summary Chips */
-        .summary { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
-        .chip { background: rgba(28,28,30,0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid #38383a; border-radius: 7px; padding: 10px 16px; }
-        .chip-val { font-size: 1.4rem; font-weight: 700; }
-        .chip-lbl { font-size: 0.6rem; color: #98989d; text-transform: uppercase; letter-spacing: 0.5px; }
-        .green { color: #4ade80; } .red { color: #f87171; } .yellow { color: #fbbf24; } .blue { color: #007aff; }
+        /* ---------- Semantic text colors (replace Tailwind utility classes) ---------- */
+        .green  { color: var(--green); }
+        .red    { color: var(--red); }
+        .yellow { color: var(--yellow); }
+        .orange { color: var(--orange); }
+        .blue   { color: var(--blue); }
+        .muted  { color: var(--label-2); }
+        .faint  { color: var(--label-3); }
 
-        /* Path Grid */
-        .path-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; align-items: start; }
+        /* ---------- Control bar (navigation material) ---------- */
+        .control-bar {
+            position: sticky; top: 0; z-index: 100;
+            background: var(--mat-bar);
+            -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
+            border-bottom: 1px solid var(--hairline);
+            padding: var(--sp-3) var(--sp-6);
+            min-height: var(--bar-h);
+            display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+        }
+        .logo { font-weight: 500; font-size: var(--fs-title3); color: var(--label-1); white-space: nowrap; letter-spacing: -0.02em; display: inline-flex; align-items: center; gap: var(--sp-2); }
+        .logo span:first-child { color: var(--blue); font-weight: 700; }
+        #siteBadge { font-size: var(--fs-caption1) !important; font-weight: 600 !important; color: var(--blue) !important; background: var(--blue-tint) !important; border: 0 !important; border-radius: var(--r-pill) !important; padding: 3px 10px !important; letter-spacing: 0.02em; margin-left: 0 !important; vertical-align: middle; }
+        #siteBadge:empty { display: none; }
 
-        /* Two-column Overview layout: move log (left) + path cards (right) */
-        .overview-cols { display: grid; grid-template-columns: minmax(440px, 1fr) 1.5fr; gap: 16px; align-items: start; }
+        .control-group {
+            display: flex; align-items: center; gap: var(--sp-2);
+            padding: 6px 10px 6px 12px;
+            background: var(--fill-4);
+            border: 0; border-radius: var(--r-sm);
+            transition: background var(--dur) var(--ease);
+        }
+        .control-group:focus-within { background: var(--fill-3); }
+        .control-group label { font-size: var(--fs-caption1); font-weight: 500; color: var(--label-2); white-space: nowrap; letter-spacing: 0.01em; }
+        .control-group input, .control-group select {
+            background: transparent; border: 0; color: var(--label-1);
+            padding: 2px 0; font-size: var(--fs-footnote); font-weight: 500;
+            outline: none; min-height: 22px;
+        }
+        .control-group select { padding-right: 2px; }
+        .control-group select option { background: var(--bg-2); color: var(--label-1); }
+        .control-group input::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.6); cursor: pointer; }
+
+        .btn {
+            background: var(--blue); color: #fff; border: 0;
+            padding: 7px 14px; border-radius: var(--r-sm);
+            font-size: var(--fs-footnote); font-weight: 600; letter-spacing: -0.005em;
+            white-space: nowrap; min-height: 32px;
+            transition: background var(--dur) var(--ease), transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
+        }
+        .btn:hover { background: #2a93ff; }
+        .btn:active { transform: scale(0.97); opacity: 0.9; }
+        .btn.secondary { background: var(--fill-3); color: var(--label-1); }
+        .btn.secondary:hover { background: var(--fill-2); }
+        .btn.danger { background: var(--red-tint); color: var(--red); }
+        .btn.danger:hover { background: rgba(255,69,58,0.26); }
+
+        .status-area { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-caption1); color: var(--label-2); margin-left: auto; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px rgba(48,209,88,0.18); animation: pulse 2.4s var(--ease) infinite; }
+        .status-dot.fetching { background: var(--yellow); box-shadow: 0 0 0 3px rgba(255,214,10,0.18); animation: none; }
+        .status-dot.error { background: var(--red); box-shadow: 0 0 0 3px rgba(255,69,58,0.18); animation: none; }
+        .status-dot.off { background: var(--gray); box-shadow: none; animation: none; }
+        #countdown { font-size: var(--fs-caption2) !important; color: var(--label-3) !important; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.45} }
+
+        /* ---------- Legend strip ---------- */
+        .legend-bar {
+            display: flex; gap: var(--sp-4); padding: var(--sp-2) var(--sp-6);
+            background: var(--bg-1);
+            border-bottom: 1px solid var(--hairline);
+            font-size: var(--fs-caption1); color: var(--label-2);
+            flex-wrap: wrap; align-items: center;
+        }
+        .legend-bar .lg-title { font-weight: 600; color: var(--label-1); }
+        .legend-bar .lg-title + .lg-item { margin-left: -4px; }
+        .legend-bar .lg-gap { margin-left: var(--sp-4); }
+        .lg-item { display: inline-flex; align-items: center; gap: 6px; }
+        .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+
+        /* ---------- Main ---------- */
+        .main { padding: var(--sp-5) var(--sp-6) var(--sp-8); }
+
+        /* ---------- Summary chips (stat cards) ---------- */
+        .summary { display: flex; gap: var(--sp-3); margin-bottom: var(--sp-5); flex-wrap: wrap; align-items: stretch; }
+        .chip {
+            background: var(--mat-card);
+            -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
+            border: 1px solid var(--hairline);
+            border-radius: var(--r-md);
+            padding: var(--sp-3) var(--sp-4);
+            min-width: 112px;
+            display: flex; flex-direction: column; justify-content: center; gap: 2px;
+        }
+        .chip-val { font-size: var(--fs-title1); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+        .chip-lbl { font-size: var(--fs-caption1); color: var(--label-2); font-weight: 500; letter-spacing: 0.01em; line-height: 1.3; }
+        .chip-lbl .sub { display: block; font-size: var(--fs-caption2); color: var(--label-3); font-weight: 400; margin-top: 2px; }
+        .chip.wide { flex: 1 1 100%; flex-direction: row; justify-content: flex-start; align-items: center; gap: var(--sp-5); padding: var(--sp-1) var(--sp-2); min-height: 0; background: transparent; border: 0; -webkit-backdrop-filter: none; backdrop-filter: none; font-size: var(--fs-caption1); color: var(--label-2); }
+        .chip.wide .k { color: var(--label-3); margin-right: 4px; }
+
+        /* ---------- Path grid & overview ---------- */
+        .path-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--sp-4); align-items: start; }
+        /* Single-view panels (Attrition, Idle, X-Train) live in the same grid; span it. */
+        .path-grid > .panel { grid-column: 1 / -1; }
+        .overview-cols { display: grid; grid-template-columns: minmax(460px, 1fr) 1.5fr; gap: var(--sp-5); align-items: start; }
         .overview-cols.single { display: block; }
         .overview-cols.single .overview-left { display: none; }
-        .overview-left { position: sticky; top: 108px; }
+        .overview-left { position: sticky; top: calc(var(--bar-h) + 56px + var(--sp-3)); }
         .overview-right { min-width: 0; }
         #moveLogTableWrap thead th { position: sticky; top: 0; z-index: 2; }
-        /* Move-log table sized to match the associate tables */
-        .movelog-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; table-layout: fixed; }
-        .movelog-table th { padding: 8px 10px; text-align: left; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; color: #636366; border-bottom: 1px solid #38383a; background: #000000; white-space: nowrap; }
-        .movelog-table td { padding: 7px 10px; border-bottom: 1px solid #2c2c2e; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .movelog-table tr:hover td { background: #1e3a5f15; }
         @media (max-width: 1100px) { .overview-cols { grid-template-columns: 1fr; } .overview-left { position: static; } }
 
-        /* Path Tabs - sticky below control bar */
-        .path-tabs { display: flex; gap: 6px; padding: 10px 20px; background: rgba(28,28,30,0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid #38383a; flex-wrap: wrap; position: sticky; top: 50px; z-index: 90; }
-        .path-tab { padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; cursor: pointer; border: 1px solid #38383a; background: #2c2c2e; color: #98989d; transition: all 0.15s; white-space: nowrap; }
-        .path-tab:hover { border-color: #007aff; color: #ffffff; }
-        .path-tab.active { background: #007aff; border-color: #007aff; color: #ffffff; font-weight: 600; }
-        .path-tab.hitting { border-left: 3px solid #4ade80; }
-        .path-tab.missing { border-left: 3px solid #f87171; }
-        .path-tab .tab-rate { font-size: 0.65rem; margin-left: 4px; opacity: 0.7; }
+        /* ---------- Segmented path tabs (pill bar) ---------- */
+        .path-tabs {
+            display: flex; gap: var(--sp-2); padding: var(--sp-3) var(--sp-6);
+            background: var(--mat-bar);
+            -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
+            border-bottom: 1px solid var(--hairline);
+            flex-wrap: wrap; position: sticky; top: var(--tabs-top); z-index: 90;
+            margin: 0 calc(-1 * var(--sp-6)) var(--sp-5);
+        }
+        .path-tab {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 8px 14px; border-radius: var(--r-pill);
+            font-size: var(--fs-footnote); font-weight: 500;
+            cursor: pointer; border: 0;
+            background: var(--fill-3); color: var(--label-1);
+            transition: background var(--dur) var(--ease), color var(--dur) var(--ease), transform var(--dur) var(--ease);
+            white-space: nowrap; user-select: none;
+        }
+        .path-tab:hover { background: var(--fill-2); }
+        .path-tab:active { transform: scale(0.97); }
+        .path-tab.active { background: var(--label-1); color: #000; font-weight: 600; }
+        .path-tab.active .tab-rate { color: rgba(0,0,0,0.55) !important; }
+        /* Status dot instead of a colored left edge. hitting/missing = path rate;
+           ok/alert/warn = semantic state for Idle (clear/flagged) and Attrition. */
+        .path-tab.hitting::before, .path-tab.missing::before,
+        .path-tab.ok::before, .path-tab.alert::before, .path-tab.warn::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+        .path-tab.hitting::before, .path-tab.ok::before { background: var(--green); }
+        .path-tab.missing::before, .path-tab.alert::before { background: var(--red); }
+        .path-tab.warn::before { background: var(--orange); }
+        .path-tab.active::before { box-shadow: 0 0 0 2px rgba(0,0,0,0.15); }
+        .path-tab .tab-rate { font-size: var(--fs-caption1); color: var(--label-2); font-weight: 500; font-variant-numeric: tabular-nums; }
+        .path-tab.alert .tab-rate { color: var(--red); font-weight: 600; }
+        .path-tab.warn .tab-rate { color: var(--orange); font-weight: 600; }
+        .path-tab.ok .tab-rate { color: var(--green); }
+        .path-tab.tab-xtrain { margin-left: auto; }
 
-        .path-card { background: rgba(28,28,30,0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid #38383a; border-radius: 12px; padding: 14px 16px; position: relative; cursor: pointer; transition: border-color 0.15s; overflow: visible; }
-        .path-card:hover { border-color: #3b5068; }
-        .path-card.hitting { border-left: 4px solid #4ade80; }
-        .path-card.missing { border-left: 4px solid #f87171; }
+        /* ---------- Path card ---------- */
+        .path-card {
+            background: var(--mat-card);
+            -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
+            border: 1px solid var(--hairline);
+            border-radius: var(--r-lg);
+            padding: var(--sp-4) var(--sp-5) var(--sp-4);
+            position: relative; cursor: pointer; overflow: visible;
+            transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
+        }
+        .path-card:hover { background: var(--mat-card-2); border-color: rgba(255,255,255,0.12); }
 
-        .path-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .path-name { font-weight: 700; font-size: 0.95rem; color: #fffffffff; text-shadow: 0 0 1px rgba(255,255,255,0.3); }
-        .path-badge { font-size: 0.65rem; padding: 2px 8px; border-radius: 3px; font-weight: 700; }
-        .path-badge.hit { background: #34c75915; color: #4ade80; }
-        .path-badge.miss { background: #ff3b3015; color: #f87171; }
+        .path-top { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+        .path-name { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; font-size: var(--fs-body); color: var(--label-1); letter-spacing: -0.01em; min-width: 0; }
+        .path-card.hitting .path-name::before, .path-card.missing .path-name::before { content: ""; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+        .path-card.hitting .path-name::before { background: var(--green); box-shadow: 0 0 0 3px var(--green-tint); }
+        .path-card.missing .path-name::before { background: var(--red); box-shadow: 0 0 0 3px var(--red-tint); }
+        .path-badge { font-size: var(--fs-caption1); padding: 4px 10px; border-radius: var(--r-pill); font-weight: 600; letter-spacing: 0.01em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .path-badge.hit { background: var(--green-tint); color: var(--green); }
+        .path-badge.miss { background: var(--red-tint); color: var(--red); }
 
-        /* Hide number input spinners */
         input[type=number]::-webkit-inner-spin-button,
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
 
-        .path-metrics { display: flex; flex-wrap: wrap; gap: 10px 12px; margin-bottom: 12px; align-items: flex-start; }
-        .pm { text-align: center; min-width: 0; }
-        .pm-val { font-size: 1.1rem; font-weight: 700; }
-        .pm-lbl { font-size: 0.55rem; color: #98989d; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
-        /* HC breakdown: Total / Active / Inactive — compact so it doesn't overflow the card */
-        .pm-hc { display: flex; gap: 5px; align-items: baseline; justify-content: center; }
-        .pm-hc .hc-part { display: flex; flex-direction: column; align-items: center; line-height: 1; }
-        .pm-hc .hc-num { font-size: 1.0rem; font-weight: 700; }
-        .pm-hc .hc-num.total { color: #ffffff; }
-        .pm-hc .hc-num.active { color: #4ade80; }
-        .pm-hc .hc-num.inactive { color: #64748b; }
-        .pm-hc .hc-sub { font-size: 0.44rem; color: #98989d; text-transform: uppercase; letter-spacing: 0.2px; margin-top: 2px; white-space: nowrap; }
-        .pm-hc .hc-sep { color: #48484a; font-size: 0.8rem; font-weight: 700; align-self: center; }
-        /* Sub-path split (e.g. BOD / NonCon for Low-Density) shown under the HC cell */
-        .pm-subpaths { display: flex; gap: 8px; justify-content: center; margin-top: 4px; flex-wrap: wrap; }
-        .pm-subpaths .sp { font-size: 0.5rem; color: #98989d; text-transform: uppercase; letter-spacing: 0.2px; white-space: nowrap; }
-        .pm-subpaths .sp b { color: #cbd5e1; font-size: 0.62rem; }
-        .pm-hc-wrap { display: flex; flex-direction: column; align-items: center; }
-        /* Low-Density: NonCon + BOD as primary HC — compact one line each:
-           LABEL  T/A/I  · rate. Keeps the card the same height as the others. */
-        .pm-hc-split { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
-        .pm-hc-split .sp-row { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
-        .pm-hc-split .sp-name { font-size: 0.55rem; font-weight: 700; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.3px; min-width: 44px; }
-        .pm-hc-split .sp-nums { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.5px; }
-        .pm-hc-split .sp-nums b { font-weight: 700; }
-        .pm-hc-split .sp-nums .total { color: #ffffff; }
-        .pm-hc-split .sp-nums .active { color: #4ade80; }
-        .pm-hc-split .sp-nums .inactive { color: #64748b; }
-        .pm-hc-split .sp-rate { font-size: 0.62rem; font-weight: 600; color: #e2e8f0; }
-        .pm-hc-split .sp-rate::after { content: ' UPH'; color: #98989d; font-size: 0.5rem; }
-        .pm-hc-split .sp-legend { font-size: 0.42rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.3px; margin-top: 1px; }
+        .path-metrics { display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-5); margin-bottom: var(--sp-4); align-items: flex-start; }
+        .pm { text-align: left; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        .pm-val { font-size: var(--fs-title2); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+        .pm-lbl { font-size: var(--fs-caption1); color: var(--label-2); font-weight: 500; white-space: nowrap; }
+        .goal-input {
+            width: 56px !important; background: var(--fill-4) !important; border: 0 !important;
+            color: var(--label-1) !important; text-align: center;
+            border-radius: var(--r-sm) !important; font-size: var(--fs-title2) !important; font-weight: 600 !important;
+            padding: 2px 4px !important; letter-spacing: -0.02em; outline: none;
+            transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+        }
+        .goal-input:hover { background: var(--fill-3) !important; }
+        .goal-input:focus { background: var(--fill-3) !important; box-shadow: 0 0 0 3px rgba(10,132,255,0.35); }
 
-        /* Progress bar */
-        .progress-wrap { margin-bottom: 12px; }
-        .progress-bar { height: 5px; background: #3a3a3c; border-radius: 3px; position: relative; }
-        .progress-fill { height: 100%; border-radius: 3px; }
-        .progress-fill.hit { background: linear-gradient(90deg, #22c55e, #4ade80); }
-        .progress-fill.miss { background: linear-gradient(90deg, #dc2626, #f87171); }
-        .progress-marker { position: absolute; top: -4px; width: 2px; height: 13px; background: #007aff; border-radius: 1px; }
+        /* HC breakdown */
+        .pm-hc { display: flex; gap: var(--sp-2); align-items: baseline; }
+        .pm-hc .hc-part { display: flex; flex-direction: column; align-items: flex-start; line-height: 1; gap: 3px; }
+        .pm-hc .hc-num { font-size: var(--fs-title2); font-weight: 600; letter-spacing: -0.02em; }
+        .pm-hc .hc-num.total { color: var(--label-1); }
+        .pm-hc .hc-num.active { color: var(--green); }
+        .pm-hc .hc-num.inactive { color: var(--label-3); }
+        .pm-hc .hc-sub { font-size: var(--fs-caption2); color: var(--label-3); font-weight: 500; white-space: nowrap; }
+        .pm-hc .hc-sep { color: var(--label-4); font-size: var(--fs-title3); font-weight: 300; align-self: flex-start; line-height: 1; }
+        .pm-subpaths { display: flex; gap: var(--sp-2); margin-top: var(--sp-1); flex-wrap: wrap; }
+        .pm-subpaths .sp { font-size: var(--fs-caption2); color: var(--label-2); white-space: nowrap; }
+        .pm-subpaths .sp b { color: var(--label-1); font-size: var(--fs-caption1); }
+        .pm-hc-wrap { display: flex; flex-direction: column; align-items: flex-start; }
+        .pm-hc-split { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+        .pm-hc-split .sp-row { display: flex; align-items: baseline; gap: var(--sp-2); white-space: nowrap; }
+        .pm-hc-split .sp-name { font-size: var(--fs-caption1); font-weight: 600; color: var(--label-2); min-width: 52px; }
+        .pm-hc-split .sp-nums { font-size: var(--fs-subhead); font-weight: 600; letter-spacing: 0.01em; color: var(--label-3); }
+        .pm-hc-split .sp-nums b { font-weight: 600; }
+        .pm-hc-split .sp-nums .total { color: var(--label-1); }
+        .pm-hc-split .sp-nums .active { color: var(--green); }
+        .pm-hc-split .sp-nums .inactive { color: var(--label-3); }
+        .pm-hc-split .sp-rate { font-size: var(--fs-caption1); font-weight: 600; color: var(--label-1); }
+        .pm-hc-split .sp-rate::after { content: ' UPH'; color: var(--label-3); font-size: var(--fs-caption2); font-weight: 500; }
+        .pm-hc-split .sp-legend { font-size: var(--fs-caption2); color: var(--label-4); margin-top: 2px; }
 
-        .path-footer { display: flex; justify-content: space-between; font-size: 0.75rem; color: #98989d; }
-        .path-footer .val { color: #ffffff; font-weight: 500; }
-        .path-footer .val.pos { color: #4ade80; }
-        .path-footer .val.neg { color: #f87171; }
+        /* Progress */
+        .progress-wrap { margin-bottom: var(--sp-3); }
+        .progress-bar { height: 6px; background: var(--fill-4); border-radius: var(--r-pill); position: relative; overflow: visible; }
+        .progress-fill { height: 100%; border-radius: var(--r-pill); transition: width 400ms var(--ease); }
+        .progress-fill.hit { background: var(--green); }
+        .progress-fill.miss { background: var(--red); }
+        .progress-marker { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--label-1); border-radius: 1px; opacity: 0.85; }
 
-        /* Expandable associate section */
-        .path-expand { display: none; margin-top: 12px; border-top: 1px solid #38383a; padding-top: 10px; overflow: visible; }
+        .path-footer { display: flex; justify-content: space-between; gap: var(--sp-3); font-size: var(--fs-footnote); color: var(--label-2); }
+        .path-footer .val { color: var(--label-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+        .path-footer .val.pos { color: var(--green); }
+        .path-footer .val.neg { color: var(--red); }
+
+        .path-expand { display: none; margin-top: var(--sp-4); border-top: 1px solid var(--hairline); padding-top: var(--sp-3); overflow: visible; }
         .path-expand.open { display: block; }
 
-        .assoc-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; table-layout: auto; }
-        .assoc-table th { padding: 8px 8px; text-align: left; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; color: #636366; border-bottom: 1px solid #38383a; background: #000000; white-space: nowrap; }
+        /* ---------- Tables (spacious, inset-grouped style) ---------- */
+        .assoc-table, .movelog-table {
+            width: 100%; border-collapse: separate; border-spacing: 0;
+            font-size: var(--fs-subhead); table-layout: auto;
+        }
+        .movelog-table { table-layout: fixed; }
+        .assoc-table th, .movelog-table th {
+            padding: 10px var(--row-pad-x);
+            text-align: left;
+            font-size: var(--fs-caption1); font-weight: 600; letter-spacing: 0.02em;
+            color: var(--label-3);
+            border-bottom: 1px solid var(--sep);
+            background: transparent;
+            white-space: nowrap;
+            text-transform: none;
+        }
+        .assoc-table th:first-child, .movelog-table th:first-child { border-top-left-radius: var(--r-sm); }
+        .assoc-table th:last-child, .movelog-table th:last-child { border-top-right-radius: var(--r-sm); }
         .assoc-table th:nth-child(3),
         .assoc-table th:nth-child(4),
         .assoc-table th:nth-child(5) { text-align: right; }
         .assoc-table th:nth-child(6),
         .assoc-table th:nth-child(7) { text-align: center; }
-        .assoc-table td { padding: 8px 8px; border-bottom: 1px solid #2c2c2e; vertical-align: middle; }
+        .assoc-table td, .movelog-table td {
+            padding: var(--row-pad-y) var(--row-pad-x);
+            border-bottom: 1px solid var(--hairline);
+            vertical-align: middle;
+            line-height: 1.35;
+            transition: background var(--dur) var(--ease);
+        }
+        .movelog-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .assoc-table tbody tr:last-child td, .movelog-table tbody tr:last-child td { border-bottom: 0; }
         .assoc-table td:nth-child(3),
         .assoc-table td:nth-child(4),
-        .assoc-table td:nth-child(5) { text-align: right; font-variant-numeric: tabular-nums; }
+        .assoc-table td:nth-child(5) { text-align: right; }
         .assoc-table td:nth-child(6),
         .assoc-table td:nth-child(7) { text-align: center; }
-        .assoc-table tr:hover td { background: #1e3a5f15; }
-        .assoc-table tr.above { border-left: 3px solid #4ade80; }
-        .assoc-table tr.at { border-left: 3px solid #fbbf24; }
-        .assoc-table tr.below { border-left: 3px solid #f87171; }
-        .rate-pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.8rem; min-width: 40px; text-align: center; }
-        .rate-pill.above { background: #34c75910; color: #4ade80; }
-        .rate-pill.at { background: #ff9f0a10; color: #fbbf24; }
-        .rate-pill.below { background: #ff3b3010; color: #f87171; }
+        .assoc-table td:first-child { font-weight: 500; color: var(--label-1); }
+        .assoc-table td:nth-child(2) { color: var(--label-2); }
+        .assoc-table tbody tr:hover td, .movelog-table tbody tr:hover td { background: var(--fill-4); }
+        .assoc-table tbody tr:hover td:first-child { border-top-left-radius: var(--r-sm); border-bottom-left-radius: var(--r-sm); }
+        .assoc-table tbody tr:hover td:last-child { border-top-right-radius: var(--r-sm); border-bottom-right-radius: var(--r-sm); }
+        /* Status via leading dot, not border stripe */
+        .assoc-table tr.above, .assoc-table tr.at, .assoc-table tr.below { border-left: 0; }
+        .assoc-table tr.above td:first-child, .assoc-table tr.at td:first-child, .assoc-table tr.below td:first-child { padding-left: calc(var(--row-pad-x) + 16px); position: relative; }
+        .assoc-table tr.above td:first-child::before, .assoc-table tr.at td:first-child::before, .assoc-table tr.below td:first-child::before {
+            content: ""; position: absolute; left: var(--row-pad-x); top: 50%; transform: translateY(-50%);
+            width: 7px; height: 7px; border-radius: 50%;
+        }
+        .assoc-table tr.above td:first-child::before { background: var(--green); }
+        .assoc-table tr.at td:first-child::before { background: var(--yellow); }
+        .assoc-table tr.below td:first-child::before { background: var(--red); }
+        .assoc-table tr.inactive { opacity: 0.42; }
+        .assoc-table tr.inactive td:first-child::before { background: var(--label-4) !important; }
+
+        .rate-pill { display: inline-block; padding: 4px 10px; border-radius: var(--r-pill); font-weight: 600; font-size: var(--fs-footnote); min-width: 52px; text-align: center; letter-spacing: -0.01em; }
+        .rate-pill.above { background: var(--green-tint); color: var(--green); }
+        .rate-pill.at { background: var(--yellow-tint); color: var(--yellow); }
+        .rate-pill.below { background: var(--red-tint); color: var(--red); }
+
+        /* Idle tables override the 7-col associate alignment.
+           by-path: Path | Total Idle | Pickers | Flagged
+           by-assoc: Login | Longest Gap | Total Shift | Idle % | Status | Verify */
+        .assoc-table.idle-table th, .assoc-table.idle-table td { text-align: left; }
+        .assoc-table.idle-table th:nth-child(n+2), .assoc-table.idle-table td:nth-child(n+2) { text-align: right; }
+        .assoc-table.idle-table.by-assoc th:nth-child(4), .assoc-table.idle-table.by-assoc td:nth-child(4) { text-align: left; }
+        .assoc-table.idle-table.by-assoc th:nth-child(5), .assoc-table.idle-table.by-assoc td:nth-child(5),
+        .assoc-table.idle-table.by-assoc th:nth-child(6), .assoc-table.idle-table.by-assoc td:nth-child(6) { text-align: center; }
+        .assoc-table.idle-table td:first-child { font-weight: 500; }
+        .assoc-table.idle-table.by-assoc tbody tr[onclick] { cursor: pointer; }
+        /* gap detail: # | Duration | Window | Path  -> only Duration is numeric */
+        .assoc-table.idle-table.gaps th:nth-child(n+3), .assoc-table.idle-table.gaps td:nth-child(n+3) { text-align: left; }
+        .assoc-table.idle-table.gaps td:first-child { font-weight: 400; }
+        /* X-Train: Login | Employee ID | Permissions  — all left. Attrition: Login | Leaving | Logged | Remove */
+        .assoc-table.xtrain-table th, .assoc-table.xtrain-table td,
+        .assoc-table.attrition-table th, .assoc-table.attrition-table td { text-align: left; }
+        .assoc-table.attrition-table th:last-child, .assoc-table.attrition-table td:last-child { text-align: center; }
+        .assoc-table.xtrain-table td:nth-child(2) { color: var(--label-2); font-variant-numeric: tabular-nums; }
+
+        /* Sortable column header (Finder/Mail convention):
+           idle  -> ⇅ glyph always shown, so the affordance is discoverable
+           hover -> label + glyph brighten, pill-shaped fill
+           sorted-> solid ▲/▼ in label colour */
+        th.th-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+        th.th-sortable .th-label { display: inline-block; padding: 3px 8px 3px 8px; margin-left: -8px; border-radius: var(--r-pill); transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+        th.th-sortable .th-sort { display: inline-block; margin-left: 2px; font-size: 0.85em; color: var(--label-3); transition: color var(--dur) var(--ease), transform var(--dur) var(--ease); }
+        th.th-sortable:hover .th-label { background: var(--fill-4); color: var(--label-1); }
+        th.th-sortable:hover .th-sort { color: var(--label-1); transform: translateY(-1px); }
+        th.th-sortable:active .th-label { background: var(--fill-3); }
+        th.th-sortable.is-sorted .th-label { color: var(--label-1); }
+        th.th-sortable.is-sorted .th-sort { color: var(--label-1); }
+
+        /* Section headings used inside panels */
+        .section-title { color: var(--label-2); font-size: var(--fs-caption1); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: var(--sp-2); }
+        .panel {
+            background: var(--mat-card);
+            -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
+            border: 1px solid var(--hairline); border-radius: var(--r-lg); padding: var(--sp-5) var(--sp-5) var(--sp-4);
+        }
+        .panel-head { display: flex; gap: var(--sp-3); align-items: center; margin-bottom: var(--sp-2); flex-wrap: wrap; }
+        .panel-head h3 { color: var(--label-1); font-size: var(--fs-title3); }
+        .panel-note { color: var(--label-2); font-size: var(--fs-footnote); margin-bottom: var(--sp-4); line-height: 1.45; max-width: 90ch; }
+
+        /* Small action buttons inside tables */
+        .mini-btn {
+            background: var(--fill-4); color: var(--label-1); border: 0;
+            border-radius: var(--r-sm); padding: 5px 10px;
+            font-size: var(--fs-caption1); font-weight: 600; min-width: 36px;
+            transition: background var(--dur) var(--ease), transform var(--dur) var(--ease);
+        }
+        .mini-btn:hover { background: var(--fill-3); }
+        .mini-btn:active { transform: scale(0.96); }
 
         /* Cross-training dots */
-        .ct-dots { display: inline-flex; gap: 4px; }
+        .ct-dots { display: inline-flex; gap: 5px; }
         .ct-d { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .ct-d.pick, .dot.pick       { background: var(--green); }
+        .ct-d.stow, .dot.stow       { background: var(--yellow); }
+        .ct-d.receive, .dot.receive { background: var(--pink); }
+        .ct-d.pack, .dot.pack       { background: var(--red); }
+        .ct-d.ship-dock, .dot.ship-dock { background: var(--indigo); }
+        .ct-d.ib-dock, .dot.ib-dock { background: var(--purple); }
+        .ct-d.icqa, .dot.icqa       { background: var(--teal); }
+        .ct-d.vrets, .dot.vrets     { background: var(--mint); }
+        .dot.above { background: var(--green); } .dot.at { background: var(--yellow); } .dot.below { background: var(--red); }
 
         /* Live indicator */
-        .live-badge { display: inline-block; font-size: 0.55rem; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
-        .live-badge.on { background: #34c75920; color: #4ade80; border: 1px solid #4ade8050; }
-        .live-badge.off { background: #47556925; color: #98989d; border: 1px solid #47556950; }
-        .assoc-table tr.inactive { opacity: 0.4; }
-        .assoc-table tr.inactive td:first-child { border-left-color: #374151 !important; }
-        .ct-d.pick { background: #4ade80; }
-        .ct-d.stow { background: #fbbf24; }
-        .ct-d.receive { background: #f472b6; }
-        .ct-d.pack { background: #f87171; }
-        .ct-d.ship-dock { background: #1d4ed8; }
-        .ct-d.ib-dock { background: #c084fc; }
-        .ct-d.icqa { background: #2dd4bf; }
-        .ct-d.vrets { background: #e879f9; }
+        .live-badge { display: inline-block; font-size: var(--fs-caption2); font-weight: 600; padding: 2px 7px; border-radius: var(--r-pill); margin-right: var(--sp-2); vertical-align: middle; letter-spacing: 0.02em; }
+        .live-badge.on { background: var(--green-tint); color: var(--green); }
+        .live-badge.off { background: var(--fill-4); color: var(--label-3); }
 
         /* Cross-training section */
-        .ct-section { margin-top: 20px; background: rgba(28,28,30,0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid #38383a; border-radius: 12px; overflow: hidden; }
-        .ct-head { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
-        .ct-head:hover { background: #2c2c2e; }
-        .ct-head h3 { font-size: 0.9rem; font-weight: 600; color: #ffffff; }
-        .ct-head .ct-toggle { font-size: 0.7rem; color: #98989d; }
-        .ct-body { display: none; padding: 12px 16px; border-top: 1px solid #38383a; }
+        .ct-section { margin-top: var(--sp-5); background: var(--mat-card); -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur); border: 1px solid var(--hairline); border-radius: var(--r-lg); overflow: hidden; }
+        .ct-head { padding: var(--sp-4) var(--sp-5); display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background var(--dur) var(--ease); }
+        .ct-head:hover { background: var(--fill-4); }
+        .ct-head h3 { font-size: var(--fs-subhead); font-weight: 600; color: var(--label-1); }
+        .ct-head .ct-toggle { font-size: var(--fs-caption1); color: var(--label-2); }
+        .ct-body { display: none; padding: var(--sp-4) var(--sp-5); border-top: 1px solid var(--hairline); }
         .ct-body.open { display: block; }
-        .ct-legend { display: flex; gap: 12px; margin-bottom: 10px; font-size: 0.65rem; color: #98989d; flex-wrap: wrap; }
-        .ct-legend-item { display: flex; align-items: center; gap: 4px; }
-        .ct-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
-        .ct-tab { padding: 4px 10px; background: #000000; border: 1px solid #38383a; border-radius: 4px; font-size: 0.7rem; cursor: pointer; color: #98989d; }
-        .ct-tab:hover { border-color: #007aff; color: #ffffff; }
-        .ct-tab.active { background: #007aff; border-color: #007aff; color: #ffffff; }
-        .ct-tab .cnt { font-size: 0.6rem; margin-left: 3px; opacity: 0.7; }
-        .ct-list { display: flex; flex-wrap: wrap; gap: 5px; max-height: 300px; overflow-y: auto; }
-        .ct-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; background: #000000; border: 1px solid #38383a; border-radius: 4px; font-size: 0.7rem; }
+        .ct-legend { display: flex; gap: var(--sp-3); margin-bottom: var(--sp-3); font-size: var(--fs-caption1); color: var(--label-2); flex-wrap: wrap; }
+        .ct-legend-item { display: flex; align-items: center; gap: 5px; }
+        .ct-tabs { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-3); flex-wrap: wrap; }
+        .ct-tab { padding: 6px 12px; background: var(--fill-4); border: 0; border-radius: var(--r-pill); font-size: var(--fs-caption1); font-weight: 500; cursor: pointer; color: var(--label-2); transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+        .ct-tab:hover { background: var(--fill-3); color: var(--label-1); }
+        .ct-tab.active { background: var(--label-1); color: #000; font-weight: 600; }
+        .ct-tab .cnt { font-size: var(--fs-caption2); margin-left: 4px; opacity: 0.7; }
+        .ct-list { display: flex; flex-wrap: wrap; gap: var(--sp-2); max-height: 320px; overflow-y: auto; }
+        .ct-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; background: var(--fill-4); border: 0; border-radius: var(--r-sm); font-size: var(--fs-caption1); }
 
         /* Loading */
-        .loading { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 1000; flex-direction: column; gap: 12px; }
-
-        /* Tooltip */
-        .has-tip { position: relative; cursor: help; }
-        /* Inline .tip-box is now only a hidden data holder; the visible tooltip
-           is #globalTip appended to <body> so it is never clipped/re-anchored
-           by an ancestor's backdrop-filter. */
-        .tip-box { display: none !important; }
-        #globalTip { display: none; position: fixed; z-index: 3000; background: #1e293b; border: 1px solid #007aff; border-radius: 12px; padding: 14px 18px; font-size: 0.78rem; white-space: nowrap; box-shadow: 0 8px 30px rgba(0,0,0,0.7); min-width: 240px; max-width: 340px; max-height: 240px; overflow-y: auto; pointer-events: none; }
-        #globalTip .tip-title { color: #ffffff; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; margin-top: 6px; }
-        #globalTip .tip-title:first-child { margin-top: 0; }
-        #globalTip .tip-yes { color: #4ade80; padding: 2px 0; }
-        #globalTip .tip-no { color: #f87171; padding: 2px 0; }
-        .tip-box .tip-no { color: #f87171; padding: 2px 0; }
+        .loading { position: fixed; inset: 0; background: rgba(0,0,0,0.88); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; z-index: 1000; flex-direction: column; gap: var(--sp-4); color: var(--label-2); font-size: var(--fs-footnote); }
         .loading.hidden { display: none; }
-        .spinner { width: 32px; height: 32px; border: 3px solid #38383a; border-top-color: #007aff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        .spinner { width: 28px; height: 28px; border: 2.5px solid var(--fill-3); border-top-color: var(--label-1); border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        @media (max-width: 768px) { .path-grid { grid-template-columns: 1fr; } }
+        /* Tooltip (popover material) */
+        .has-tip { position: relative; cursor: help; }
+        .tip-box { display: none !important; }
+        #globalTip {
+            display: none; position: fixed; z-index: 3000;
+            background: rgba(44, 44, 46, 0.94);
+            -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: var(--r-md);
+            padding: var(--sp-3) var(--sp-4);
+            font-size: var(--fs-footnote); line-height: 1.45; white-space: nowrap;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.04) inset;
+            min-width: 240px; max-width: 360px; max-height: 260px; overflow-y: auto; pointer-events: none;
+            color: var(--label-1);
+        }
+        #globalTip .tip-title { color: var(--label-2); font-size: var(--fs-caption2); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 4px; margin-top: var(--sp-2); }
+        #globalTip .tip-title:first-child { margin-top: 0; }
+        #globalTip .tip-yes { color: var(--green); padding: 2px 0; }
+        #globalTip .tip-no { color: var(--red); padding: 2px 0; }
+
+        /* Modal (sheet) */
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); z-index: 2000; align-items: center; justify-content: center; }
+        .modal-sheet {
+            background: rgba(44,44,46,0.96); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: var(--r-xl); padding: var(--sp-6);
+            max-width: 560px; width: 92%; max-height: 82vh; overflow-y: auto;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+            animation: sheetIn 220ms var(--ease);
+        }
+        @keyframes sheetIn { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+        .modal-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+        .modal-head h3 { color: var(--label-1); font-size: var(--fs-title3); font-weight: 600; letter-spacing: -0.01em; }
+        .modal-close { background: var(--fill-3); border: 0; color: var(--label-1); font-size: var(--fs-footnote); font-weight: 600; width: 30px; height: 30px; border-radius: 50%; line-height: 30px; text-align: center; transition: background var(--dur) var(--ease); }
+        .modal-close:hover { background: var(--fill-2); }
+        .modal-body { font-size: var(--fs-footnote); color: var(--label-2); line-height: 1.5; }
+
+        /* Banner */
+        .banner-danger { background: var(--red-tint); color: var(--red); border: 1px solid rgba(255,69,58,0.35); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); margin: 0 0 var(--sp-4); font-size: var(--fs-footnote); font-weight: 500; line-height: 1.45; }
+        .banner-danger b { color: var(--label-1); }
+
+        /* Inputs used in panels (attrition etc.) */
+        .field {
+            background: var(--fill-4); border: 0; color: var(--label-1);
+            border-radius: var(--r-sm); padding: 8px 12px; font-size: var(--fs-footnote); outline: none; min-height: 34px;
+            transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+        }
+        .field:focus { background: var(--fill-3); box-shadow: 0 0 0 3px rgba(10,132,255,0.35); }
+        .field::placeholder { color: var(--label-3); }
+
+        /* Idle bar */
+        .idle-bar { display: flex; align-items: center; gap: var(--sp-2); }
+        .idle-bar .track { flex: 1; min-width: 90px; height: 8px; border-radius: var(--r-pill); overflow: hidden; background: var(--fill-4); display: flex; }
+        .idle-bar .seg-prod { background: var(--green); }
+        .idle-bar .seg-idle { background: var(--red); }
+        .idle-bar .pct { font-size: var(--fs-footnote); min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+        .caret { display: inline-block; width: 14px; color: var(--label-3); transition: transform var(--dur) var(--ease); font-size: 0.8em; }
+        .caret.open { transform: rotate(90deg); }
+
+        /* Utility */
+        .nowrap { white-space: nowrap; }
+        .right { text-align: right; }
+        .center { text-align: center; }
+        .stack { display: flex; flex-direction: column; gap: var(--sp-2); }
+        .row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+        .mt-1 { margin-top: var(--sp-1); } .mt-2 { margin-top: var(--sp-2); } .mt-3 { margin-top: var(--sp-3); } .mt-4 { margin-top: var(--sp-4); }
+        .mb-2 { margin-bottom: var(--sp-2); } .mb-3 { margin-bottom: var(--sp-3); } .mb-4 { margin-bottom: var(--sp-4); } .mb-5 { margin-bottom: var(--sp-5); }
+
+        @media (max-width: 768px) { .path-grid { grid-template-columns: 1fr; } .main { padding: var(--sp-4); } .control-bar, .path-tabs, .legend-bar { padding-left: var(--sp-4); padding-right: var(--sp-4); } .path-tabs { margin-left: calc(-1 * var(--sp-4)); margin-right: calc(-1 * var(--sp-4)); } }
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
     </style>
 </head>
 <body>
     <div class="control-bar">
-        <div class="logo">Pick<span>Matrix</span><span id="siteBadge" style="margin-left:8px;font-size:0.7rem;font-weight:700;color:#0a84ff;background:#0a84ff22;border:1px solid #0a84ff55;border-radius:6px;padding:2px 8px;vertical-align:middle;"></span></div>
+        <div class="logo">Pick<span>Matrix</span><span id="siteBadge"></span></div>
         <div class="control-group">
             <label>Site</label>
             <select id="siteSelect" onchange="changeSite()"></select>
@@ -240,24 +619,24 @@
         <div class="status-area">
             <div class="status-dot" id="statusDot"></div>
             <span id="statusText">Loading...</span>
-            <span id="countdown" style="font-size:0.65rem;color:#475569;"></span>
+            <span id="countdown"></span>
         </div>
     </div>
 
-    <div style="display:flex;gap:16px;padding:7px 20px;background:rgba(28,28,30,0.95);border-bottom:1px solid #38383a;font-size:0.75rem;color:#e5e5ea;flex-wrap:wrap;align-items:center;">
-        <span style="font-weight:600;color:#fff;">Cross-training:</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#4ade80;display:inline-block;"></span>Pick</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#fbbf24;display:inline-block;"></span>Stow</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#f472b6;display:inline-block;"></span>Receive</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#f87171;display:inline-block;"></span>Pack</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#1d4ed8;display:inline-block;"></span>Ship Dock</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#c084fc;display:inline-block;"></span>IB Dock</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#2dd4bf;display:inline-block;"></span>ICQA</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#e879f9;display:inline-block;"></span>VRets</span>
-        <span style="margin-left:16px;font-weight:600;color:#fff;">Rate:</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#4ade80;display:inline-block;"></span>Above</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#fbbf24;display:inline-block;"></span>At</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#f87171;display:inline-block;"></span>Below</span>
+    <div class="legend-bar">
+        <span class="lg-title">Cross-training</span>
+        <span class="lg-item"><span class="dot pick"></span>Pick</span>
+        <span class="lg-item"><span class="dot stow"></span>Stow</span>
+        <span class="lg-item"><span class="dot receive"></span>Receive</span>
+        <span class="lg-item"><span class="dot pack"></span>Pack</span>
+        <span class="lg-item"><span class="dot ship-dock"></span>Ship Dock</span>
+        <span class="lg-item"><span class="dot ib-dock"></span>IB Dock</span>
+        <span class="lg-item"><span class="dot icqa"></span>ICQA</span>
+        <span class="lg-item"><span class="dot vrets"></span>VRets</span>
+        <span class="lg-title lg-gap">Rate</span>
+        <span class="lg-item"><span class="dot above"></span>Above</span>
+        <span class="lg-item"><span class="dot at"></span>At</span>
+        <span class="lg-item"><span class="dot below"></span>Below</span>
     </div>
 
     <div class="main">
@@ -269,20 +648,20 @@
         </div>
     </div>
 
-    <div class="loading" id="loading"><div class="spinner"></div><span>PickMatrix loading...</span></div>
+    <div class="loading" id="loading"><div class="spinner"></div><span>Loading PickMatrix&hellip;</span></div>
 
     <!-- Single body-level tooltip (rendered outside any backdrop-filtered card
          so position:fixed is truly viewport-relative and never clipped). -->
     <div id="globalTip"></div>
 
     <!-- Recommendation Modal -->
-    <div id="recModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:2000;align-items:center;justify-content:center;" onclick="closeRec()">
-        <div style="background:#2c2c2e;border:1px solid #48484a;border-radius:16px;padding:24px;max-width:520px;width:90%;max-height:80vh;overflow-y:auto;" onclick="event.stopPropagation()">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                <h3 style="color:#ffffff;font-size:1.1rem;font-weight:600;" id="recTitle">Move Recommendation</h3>
-                <button onclick="closeRec()" style="background:#3a3a3c;border:none;color:#ffffff;font-size:1rem;cursor:pointer;width:28px;height:28px;border-radius:50%;line-height:28px;">X</button>
+    <div id="recModal" class="modal-backdrop" style="display:none;" onclick="closeRec()">
+        <div class="modal-sheet" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3 id="recTitle">Move Recommendation</h3>
+                <button class="modal-close" onclick="closeRec()" aria-label="Close">&#10005;</button>
             </div>
-            <div id="recContent" style="font-size:0.82rem;color:#e5e5ea;"></div>
+            <div id="recContent" class="modal-body"></div>
         </div>
     </div>
 
@@ -463,7 +842,7 @@
                 if (!el) {
                     el = document.createElement('div');
                     el.id = 'fcMismatchBanner';
-                    el.style.cssText = 'background:#7f1d1d;color:#fecaca;border:1px solid #ef4444;border-radius:8px;padding:8px 14px;margin:8px 12px;font-size:0.8rem;font-weight:600;';
+                    el.className = 'banner-danger';
                     const grid = document.getElementById('pathGrid');
                     grid.parentNode.insertBefore(el, grid);
                 }
@@ -496,7 +875,7 @@
             <div class="chip"><div class="chip-val blue">${totalPaths}</div><div class="chip-lbl">Paths</div></div>
             <div class="chip"><div class="chip-val green">${hitting}</div><div class="chip-lbl">Hitting Rate</div></div>
             <div class="chip"><div class="chip-val red">${totalPaths-hitting}</div><div class="chip-lbl">Missing Rate</div></div>
-            <div class="chip"><div class="chip-val" style="color:#fff;">${totalUPH}</div><div class="chip-lbl">Pick Total UPH</div></div>
+            <div class="chip"><div class="chip-val">${totalUPH}</div><div class="chip-lbl">Pick Total UPH</div></div>
             <div class="chip"><div class="pm-hc" style="justify-content:flex-start;">
                 <div class="hc-part"><span class="hc-num total">${phc?phc.total:'--'}</span><span class="hc-sub">Total</span></div>
                 <span class="hc-sep">/</span>
@@ -504,20 +883,20 @@
                 <span class="hc-sep">/</span>
                 <div class="hc-part"><span class="hc-num inactive">${phc?phc.inactive:'--'}</span><span class="hc-sub">Inactive</span></div>
             </div><div class="chip-lbl">Pick HC</div></div>
-            <div class="chip"><div class="chip-val" style="color:#ff9500;">${getAttrition().length}</div><div class="chip-lbl">Attrition${(()=>{const a=getAttrition();if(!a.length)return '';const byTime={};a.forEach(x=>{const t=x.departing||'?';byTime[t]=(byTime[t]||0)+1;});return '<br><span style=\"font-size:0.55rem;color:#98989d;\">'+Object.entries(byTime).map(([t,c])=>c+' @ '+t).join(', ')+'</span>';})()}</div></div>
-            <div class="chip"><div class="chip-val" style="color:#ff453a;" id="idleChipCount">${((data.idle&&data.idle.flagged)||[]).length}</div><div class="chip-lbl">Idle Flagged${(()=>{const i=data.idle;if(!i)return '';const t=i.threshold_min||30;return '<br><span style=\"font-size:0.55rem;color:#98989d;\">&ge; '+t+' min gap</span>';})()}</div></div>
-            <div class="chip" style="margin-left:auto;"><div class="chip-val" style="font-size:0.85rem;color:#98989d;">${data.timestamp||'--'}</div><div class="chip-lbl">Last Updated</div></div>
+            <div class="chip"><div class="chip-val orange">${getAttrition().length}</div><div class="chip-lbl">Attrition${(()=>{const a=getAttrition();if(!a.length)return '';const byTime={};a.forEach(x=>{const t=x.departing||'?';byTime[t]=(byTime[t]||0)+1;});return '<span class=\"sub\">'+Object.entries(byTime).map(([t,c])=>c+' @ '+t).join(', ')+'</span>';})()}</div></div>
+            <div class="chip"><div class="chip-val red" id="idleChipCount">${((data.idle&&data.idle.flagged)||[]).length}</div><div class="chip-lbl">Idle Flagged${(()=>{const i=data.idle;if(!i)return '';const t=i.threshold_min||30;return '<span class=\"sub\">&ge; '+t+' min gap</span>';})()}</div></div>
+            <div class="chip" style="margin-left:auto;"><div class="chip-val muted" style="font-size:var(--fs-subhead);font-weight:500;">${data.timestamp||'--'}</div><div class="chip-lbl">Last Updated</div></div>
         `;
         
         // Add status indicators for X-Train and History
-        const xtStatus = data.xtrain_status==='ready' ? `<span style="color:#4ade80;">&#10003; ${data.xtrain_count} verified</span>`
-            : data.xtrain_status==='auth_expired' ? `<span style="color:#ff453a;" title="Permission checks are paused until you re-authenticate. They resume automatically.">&#9888; Midway session expired &mdash; re-login to FCLM in Firefox</span>`
-            : `<span style="color:#fbbf24;">&#9696; Verifying permissions...</span>`;
-        const bfStatus = data.backfill_status==='done' ? `<span style="color:#4ade80;">&#10003; Up to date</span>` : data.backfill_status==='running' ? `<span style="color:#fbbf24;">&#9696; ${data.backfill_progress||'Collecting...'}</span>` : `<span style="color:#98989d;">Idle</span>`;
+        const xtStatus = data.xtrain_status==='ready' ? `<span style="color:var(--green);">&#10003; ${data.xtrain_count} verified</span>`
+            : data.xtrain_status==='auth_expired' ? `<span style="color:var(--red);" title="Permission checks are paused until you re-authenticate. They resume automatically.">&#9888; Midway session expired &mdash; re-login to FCLM in Firefox</span>`
+            : `<span style="color:var(--yellow);">&#9696; Verifying permissions...</span>`;
+        const bfStatus = data.backfill_status==='done' ? `<span style="color:var(--green);">&#10003; Up to date</span>` : data.backfill_status==='running' ? `<span style="color:var(--yellow);">&#9696; ${data.backfill_progress||'Collecting...'}</span>` : `<span style="color:var(--label-2);">Idle</span>`;
         document.getElementById('summary').innerHTML += `
-            <div style="display:flex;gap:16px;width:100%;margin-top:6px;font-size:0.65rem;">
-                <span style="color:#98989d;">X-Train: ${xtStatus}</span>
-                <span style="color:#98989d;">History: ${bfStatus}</span>
+            <div class="chip wide">
+                <span><span class="k">X-Train</span>${xtStatus}</span>
+                <span><span class="k">History</span>${bfStatus}</span>
             </div>
         `;
         
@@ -535,7 +914,7 @@
                 for(const d of perms){if(d in deptAvail) deptAvail[d]++;}
             }
         }
-        const deptColors2={Stow:'#fbbf24',Pack:'#f87171',Receive:'#f472b6','Ship Dock':'#1d4ed8',ICQA:'#2dd4bf'};
+        const deptColors2={Stow:'var(--yellow)',Pack:'var(--red)',Receive:'var(--pink)','Ship Dock':'var(--indigo)',ICQA:'var(--teal)'};
         let xChips='';
         for(const [dept,count] of Object.entries(deptAvail)){
             xChips+=`<div class="chip"><div class="chip-val" style="color:${deptColors2[dept]}">${count}</div><div class="chip-lbl">X → ${dept}</div></div>`;
@@ -551,31 +930,33 @@
             const hcLabel = wbpTab ? (wbpTab.total||[]).length : '--';
             tabsHtml += `<div class="path-tab ${isActive?'active':''} ${p.hitting?'hitting':'missing'}" onclick="selectPath('${p.name}')">${p.name}<span class="tab-rate">${hcLabel} HC</span></div>`;
         }
-        tabsHtml += `<div class="path-tab ${selectedPath==='attrition'?'active':''}" onclick="selectPath('attrition')" style="border-color:#ff950050;">Attrition<span class="tab-rate">${getAttrition().length}</span></div>`;
-        tabsHtml += `<div class="path-tab ${selectedPath==='idle'?'active':''}" onclick="selectPath('idle')" style="border-color:#ff453a50;">Idle<span class="tab-rate" id="idleTabCount">${((data.idle&&data.idle.flagged)||[]).length} flagged</span></div>`;
-        tabsHtml += `<div class="path-tab ${selectedPath==='xtrain'?'active':''}" onclick="selectPath('xtrain')" style="margin-left:auto;border-color:#007aff50;">X-Train ${data.xtrain_status==='ready'?'<span style=\"color:#4ade80;\">&#10003; '+data.xtrain_count+'</span>':data.xtrain_status==='auth_expired'?'<span style=\"color:#ff453a;\" title=\"Midway session expired - re-login to FCLM\">&#9888; re-login</span>':'<span style=\"color:#fbbf24;\">&#9696; verifying...</span>'}</div>`;
+        const attrN = getAttrition().length;
+        const idleN = ((data.idle&&data.idle.flagged)||[]).length;
+        tabsHtml += `<div class="path-tab ${selectedPath==='attrition'?'active':''} tab-attrition ${attrN>0?'warn':''}" onclick="selectPath('attrition')">Attrition<span class="tab-rate">${attrN}</span></div>`;
+        tabsHtml += `<div class="path-tab ${selectedPath==='idle'?'active':''} tab-idle ${idleN>0?'alert':'ok'}" onclick="selectPath('idle')">Idle<span class="tab-rate" id="idleTabCount">${idleN} flagged</span></div>`;
+        tabsHtml += `<div class="path-tab ${selectedPath==='xtrain'?'active':''} tab-xtrain" onclick="selectPath('xtrain')">X-Train ${data.xtrain_status==='ready'?'<span style=\"color:var(--green);\">&#10003; '+data.xtrain_count+'</span>':data.xtrain_status==='auth_expired'?'<span style=\"color:var(--red);\" title=\"Midway session expired - re-login to FCLM\">&#9888; re-login</span>':'<span style=\"color:var(--yellow);\">&#9696; verifying...</span>'}</div>`;
         document.getElementById('pathTabs').innerHTML = tabsHtml;
 
         // Path cards
         let html='';
         if(selectedPath==='attrition'){
             const attrList=getAttrition();
-            html=`<div style="background:rgba(44,44,46,0.95);border:1px solid #38383a;border-radius:12px;padding:20px;">
-                <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
-                    <h3 style="color:#ffffff;font-size:1rem;">Attrition Tracker</h3>
-                    <span style="color:#ff9500;font-size:0.8rem;font-weight:600;">${attrList.length} leaving early</span>
+            html=`<div class="panel">
+                <div class="panel-head mb-4">
+                    <h3>Attrition Tracker</h3>
+                    <span class="orange" style="font-size:var(--fs-footnote);font-weight:600;">${attrList.length} leaving early</span>
                 </div>
                 <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap;position:relative;">
                     <div style="position:relative;">
-                        <input type="text" id="attritionInput" placeholder="Enter login..." autocomplete="off" style="width:200px;background:#1c1c1e;border:1px solid #48484a;color:#ffffff;padding:8px 12px;border-radius:8px;font-size:0.8rem;" oninput="showAttrSuggestions()" onkeypress="if(event.key==='Enter')addAttrition()">
-                        <div id="attrSuggestions" style="display:none;position:absolute;top:100%;left:0;width:200px;max-height:150px;overflow-y:auto;background:#2c2c2e;border:1px solid #48484a;border-radius:8px;margin-top:4px;z-index:200;"></div>
+                        <input type="text" id="attritionInput" placeholder="Enter login..." autocomplete="off" class="field" style="width:220px;" oninput="showAttrSuggestions()" onkeypress="if(event.key==='Enter')addAttrition()">
+                        <div id="attrSuggestions" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:180px;overflow-y:auto;background:rgba(44,44,46,0.96);backdrop-filter:var(--mat-blur);-webkit-backdrop-filter:var(--mat-blur);border:1px solid rgba(255,255,255,0.12);border-radius:var(--r-md);margin-top:6px;z-index:200;box-shadow:0 12px 40px rgba(0,0,0,0.5);"></div>
                     </div>
-                    <input type="time" id="attritionTime" style="background:#1c1c1e;border:1px solid #48484a;color:#ffffff;padding:8px 12px;border-radius:8px;font-size:0.8rem;">
-                    <button onclick="addAttrition()" style="background:#ff9500;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:0.8rem;cursor:pointer;font-weight:500;">Add</button>
+                    <input type="time" id="attritionTime" class="field">
+                    <button onclick="addAttrition()" class="btn" style="background:var(--orange);color:#000;">Add</button>
                 </div>
-                <table class="assoc-table">
+                <table class="assoc-table attrition-table">
                     <thead><tr><th>Login</th><th>Leaving At</th><th>Logged At</th><th>Remove</th></tr></thead>
-                    <tbody>${attrList.length>0?attrList.map((a,i)=>`<tr><td style="color:#ffffff;">${a.login}</td><td style="color:#ff9500;font-weight:600;">${a.departing||'--'}</td><td style="color:#98989d;">${a.time}</td><td><button onclick="removeAttrition(${i})" style="background:#3a3a3c;color:#ff453a;border:1px solid #48484a;border-radius:4px;padding:2px 8px;font-size:0.65rem;cursor:pointer;">X</button></td></tr>`).join(''):'<tr><td colspan="4" style="color:#636366;text-align:center;padding:20px;">No attrition logged this shift</td></tr>'}</tbody>
+                    <tbody>${attrList.length>0?attrList.map((a,i)=>`<tr><td>${a.login}</td><td class="orange" style="font-weight:600;">${a.departing||'--'}</td><td class="muted">${a.time}</td><td><button onclick="removeAttrition(${i})" class="mini-btn" style="color:var(--red);" title="Remove">&#10005;</button></td></tr>`).join(''):'<tr><td colspan="4" class="faint" style="text-align:center;padding:var(--sp-6);">No attrition logged this shift</td></tr>'}</tbody>
                 </table>
             </div>`;
         } else if(selectedPath==='idle'){
@@ -586,22 +967,22 @@
             html=`<div id="idlePanel">${buildIdlePanel(data.idle)}</div>`;
         } else if(selectedPath==='xtrain'){
             // X-Train Lookup view
-            const ctMap=data.cross_training_by_employee_id||{};            html=`<div style="background:rgba(44,44,46,0.95);border:1px solid #38383a;border-radius:12px;padding:20px;">
-                <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
-                    <h3 style="color:#fff;font-size:1rem;">Cross-Training Lookup</h3>
-                    <input type="text" id="xtrainSearch" placeholder="Search login or name..." oninput="filterXtrain()" style="flex:1;max-width:300px;background:#1c1c1e;border:1px solid #38383a;color:#e0e0e0;padding:8px 12px;border-radius:5px;font-size:0.8rem;">
+            const ctMap=data.cross_training_by_employee_id||{};            html=`<div class="panel">
+                <div class="panel-head mb-4">
+                    <h3>Cross-Training Lookup</h3>
+                    <input type="text" id="xtrainSearch" placeholder="Search login or name..." oninput="filterXtrain()" class="field" style="flex:1;max-width:320px;">
                 </div>
-                <div style="display:flex;gap:10px;margin-bottom:12px;font-size:0.7rem;color:#94a3b8;flex-wrap:wrap;">
-                    <span><span class="ct-d pick" style="vertical-align:middle;"></span> Pick</span>
-                    <span><span class="ct-d stow" style="vertical-align:middle;"></span> Stow</span>
-                    <span><span class="ct-d receive" style="vertical-align:middle;"></span> Receive</span>
-                    <span><span class="ct-d pack" style="vertical-align:middle;"></span> Pack</span>
-                    <span><span class="ct-d ship-dock" style="vertical-align:middle;"></span> Ship Dock</span>
-                    <span><span class="ct-d ib-dock" style="vertical-align:middle;"></span> IB Dock</span>
-                    <span><span class="ct-d icqa" style="vertical-align:middle;"></span> ICQA</span>
-                    <span><span class="ct-d vrets" style="vertical-align:middle;"></span> VRets</span>
+                <div class="row mb-3" style="gap:var(--sp-3);font-size:var(--fs-caption1);color:var(--label-2);">
+                    <span class="lg-item"><span class="dot pick"></span>Pick</span>
+                    <span class="lg-item"><span class="dot stow"></span>Stow</span>
+                    <span class="lg-item"><span class="dot receive"></span>Receive</span>
+                    <span class="lg-item"><span class="dot pack"></span>Pack</span>
+                    <span class="lg-item"><span class="dot ship-dock"></span>Ship Dock</span>
+                    <span class="lg-item"><span class="dot ib-dock"></span>IB Dock</span>
+                    <span class="lg-item"><span class="dot icqa"></span>ICQA</span>
+                    <span class="lg-item"><span class="dot vrets"></span>VRets</span>
                 </div>
-                <table class="assoc-table" id="xtrainTable">
+                <table class="assoc-table xtrain-table" id="xtrainTable">
                     <thead><tr><th>Login</th><th>Employee ID</th><th>Verified Permissions</th></tr></thead>
                     <tbody id="xtrainBody">`;
             // Show all associates with permissions
@@ -627,7 +1008,7 @@
                         }
                     }
                 }
-                html+=`<tr class="xtrain-row" data-search="${(login||'').toLowerCase()} ${eid}"><td style="color:#e0e0e0;">${login||eid||key}</td><td style="color:#636366;">${eid||'—'}</td><td><span class="ct-dots">${dots}</span> <span style="color:#636366;font-size:0.65rem;">${perms.join(', ')}</span></td></tr>`;
+                html+=`<tr class="xtrain-row" data-search="${(login||'').toLowerCase()} ${eid}"><td style="color:var(--label-1);">${login||eid||key}</td><td style="color:var(--label-3);">${eid||'—'}</td><td><span class="ct-dots">${dots}</span> <span style="color:var(--label-3);font-size:0.65rem;">${perms.join(', ')}</span></td></tr>`;
             }
             html+=`</tbody></table></div>`;
         } else {
@@ -646,7 +1027,7 @@
                 </div>
                 <div class="path-metrics">
                     <div class="pm"><div class="pm-val ${p.hitting?'green':'red'}">${p.rate.toFixed(1)}</div><div class="pm-lbl">Current UPH</div></div>
-                    <div class="pm"><div class="pm-val"><input type="number" class="goal-input" value="${p.expected}" data-path="${p.name}" onclick="event.stopPropagation()" onchange="updateGoal(this)" style="width:42px;background:#1c1c1e;border:1px solid #38383a;color:#fff;text-align:center;border-radius:3px;font-size:1.05rem;font-weight:700;padding:1px 2px;"></div><div class="pm-lbl">Goal UPH</div></div>
+                    <div class="pm"><div class="pm-val"><input type="number" class="goal-input" value="${p.expected}" data-path="${p.name}" onclick="event.stopPropagation()" onchange="updateGoal(this)"></div><div class="pm-lbl">Goal UPH</div></div>
                     <div class="pm">${(()=>{
                         // Picking Console is the SOLE source of truth for headcount.
                         //   Total    = every picker the console lists on this path
@@ -719,9 +1100,9 @@
                             const active=hasWF?filtered.filter(a=>{const l=a.login||'';return l&&activeLogins.includes(l);}):filtered;
                             const inactive=hasWF?filtered.filter(a=>{const l=a.login||'';return !l||!activeLogins.includes(l);}):[];
                             let rows='';
-                            if(hasWF&&active.length>0) rows+=`<tr><td colspan="7" style="padding:10px 8px 6px;font-size:0.7rem;font-weight:700;color:#4ade80;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #38383a;background:#1c1c1e;">CURRENTLY PICKING (${active.length})</td></tr>`;
+                            if(hasWF&&active.length>0) rows+=`<tr><td colspan="7" style="padding:10px 8px 6px;font-size:0.7rem;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--hairline);background:var(--bg-1);">CURRENTLY PICKING (${active.length})</td></tr>`;
                             rows+=active.map(a=>renderRow(a,p,false)).join('');
-                            if(hasWF&&inactive.length>0) rows+=`<tr><td colspan="7" style="padding:14px 8px 6px;font-size:0.7rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #38383a;background:#1c1c1e;">PRIOR / INACTIVE (${inactive.length})</td></tr>`;
+                            if(hasWF&&inactive.length>0) rows+=`<tr><td colspan="7" style="padding:14px 8px 6px;font-size:0.7rem;font-weight:700;color:var(--label-3);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--hairline);background:var(--bg-1);">PRIOR / INACTIVE (${inactive.length})</td></tr>`;
                             rows+=inactive.map(a=>renderRow(a,p,true)).join('');
                             return rows;
                         })()}</tbody>
@@ -812,12 +1193,12 @@
         // container persist across refreshes (scroll position is not reset).
         if (!document.getElementById('moveLogTableWrap')) {
             section.innerHTML = `
-                <div style="background:rgba(28,28,30,0.95);border:1px solid #38383a;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100vh - 140px);">
-                    <div style="padding:12px 16px;border-bottom:1px solid #38383a;flex:0 0 auto;">
+                <div class="panel" style="padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100vh - 160px);">
+                    <div style="padding:var(--sp-4) var(--sp-5);border-bottom:1px solid var(--hairline);flex:0 0 auto;">
                         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
-                            <h3 style="color:#fff;font-size:0.9rem;font-weight:600;">Path Move Log</h3>
+                            <h3 style="font-size:var(--fs-subhead);">Path Move Log</h3>
                             <div style="display:flex;align-items:center;gap:6px;">
-                                <select id="moveLogRangeSel" onchange="changeMoveLogRange(this)" title="Time range" style="background:#1c1c1e;border:1px solid #38383a;color:#e0e0e0;padding:4px 6px;border-radius:5px;font-size:0.7rem;">
+                                <select id="moveLogRangeSel" onchange="changeMoveLogRange(this)" title="Time range" class="field" style="padding:5px 8px;min-height:30px;font-size:var(--fs-caption1);">
                                     <option value="shift">This shift</option>
                                     <option value="4h">Last 4h</option>
                                     <option value="12h">Last 12h</option>
@@ -827,7 +1208,7 @@
                                 <button class="btn" onclick="exportMoveLog()" style="padding:5px 10px;" title="Export end-of-shift CSV">Export CSV</button>
                             </div>
                         </div>
-                        <input type="text" id="moveLogSearch" placeholder="Filter by login or path..." value="${moveLogFilter}" oninput="moveLogFilterInput(this)" style="width:100%;background:#1c1c1e;border:1px solid #38383a;color:#e0e0e0;padding:6px 10px;border-radius:6px;font-size:0.75rem;">
+                        <input type="text" id="moveLogSearch" placeholder="Filter by login or path..." value="${moveLogFilter}" oninput="moveLogFilterInput(this)" style="width:100%;background:var(--bg-1);border:1px solid var(--hairline);color:var(--label-1);padding:6px 10px;border-radius:6px;font-size:0.75rem;">
                     </div>
                     <div id="moveLogTableWrap" onscroll="moveLogScroll=this.scrollTop" style="overflow-y:auto;flex:1 1 auto;padding:0 4px 4px;"></div>
                 </div>`;
@@ -852,19 +1233,19 @@
 
         let body;
         if (rows.length === 0) {
-            body = `<tr><td colspan="3" style="color:#636366;text-align:center;padding:20px;font-size:0.75rem;">${(moveLog||[]).length===0 ? 'No path moves detected yet. Moves are logged automatically as pickers change paths.' : 'No moves match your filter.'}</td></tr>`;
+            body = `<tr><td colspan="3" style="color:var(--label-3);text-align:center;padding:20px;font-size:0.75rem;">${(moveLog||[]).length===0 ? 'No path moves detected yet. Moves are logged automatically as pickers change paths.' : 'No moves match your filter.'}</td></tr>`;
         } else {
             body = rows.map(m => {
                 const t = (m.timestamp || '').replace('T', ' ').slice(5, 16); // MM-DD HH:MM
                 const dot = m.source === 'auto'
-                    ? '<span title="Auto-detected" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#4ade80;margin-right:5px;vertical-align:middle;"></span>'
-                    : '<span title="Manual" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#fbbf24;margin-right:5px;vertical-align:middle;"></span>';
+                    ? '<span title="Auto-detected" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:5px;vertical-align:middle;"></span>'
+                    : '<span title="Manual" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--yellow);margin-right:5px;vertical-align:middle;"></span>';
                 const who = m.login || m.employee_id || '--';
                 const nameTitle = (m.name || '').replace(/"/g, '&quot;');
                 return `<tr title="${nameTitle}">
-                    <td style="color:#94a3b8;">${dot}${who}</td>
-                    <td><span style="color:#f87171;">${m.from_path || '--'}</span> <span style="color:#636366;">→</span> <span style="color:#4ade80;">${m.to_path || '--'}</span></td>
-                    <td style="color:#98989d;font-variant-numeric:tabular-nums;">${t || '--'}</td>
+                    <td style="color:var(--label-2);">${dot}${who}</td>
+                    <td><span style="color:var(--red);">${m.from_path || '--'}</span> <span style="color:var(--label-3);">→</span> <span style="color:var(--green);">${m.to_path || '--'}</span></td>
+                    <td style="color:var(--label-2);font-variant-numeric:tabular-nums;">${t || '--'}</td>
                 </tr>`;
             }).join('');
         }
@@ -972,65 +1353,49 @@
         })();
         const fmt = m => { const x=Math.round(m||0); const h=Math.floor(x/60), mm=x%60; return h>0?(h+'h '+mm+'m'):(mm+'m'); };
         const scanLbl = idle.scanning
-            ? ('<span style="color:#fbbf24;">&#9696; scanning' + ((idle.scan_total)?(' '+(idle.scan_done||0)+'/'+idle.scan_total):'') + '...</span>')
-            : (idle.last_scan ? '<span style="color:#4ade80;">&#10003; scanned '+idle.last_scan+'</span>' : '<span style="color:#98989d;">not scanned yet</span>');
-        const bpHtml = (()=>{
-            const bp = (idle.by_path || []);
-            if(!bp.length) return '';
-            return `<div style="margin-bottom:18px;">
-                <div style="color:#c7c7cc;font-size:0.72rem;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Idle by Path</div>
-                <table class="assoc-table">
-                    <thead><tr><th>Path</th><th>Total Idle</th><th>Pickers</th><th>Flagged</th></tr></thead>
-                    <tbody>${bp.map(p=>`<tr>
-                        <td style="color:#ffffff;">${p.path}</td>
-                        <td style="color:#c7c7cc;">${fmt(p.idle_min)}</td>
-                        <td style="color:#98989d;">${p.pickers}</td>
-                        <td style="color:${p.flagged_count>0?'#ff453a':'#4ade80'};font-weight:${p.flagged_count>0?'700':'400'};">${p.flagged_count}</td>
-                    </tr>`).join('')}</tbody>
-                </table>
-            </div>`;
-        })();
+            ? ('<span style="color:var(--yellow);">&#9696; scanning' + ((idle.scan_total)?(' '+(idle.scan_done||0)+'/'+idle.scan_total):'') + '...</span>')
+            : (idle.last_scan ? '<span style="color:var(--green);">&#10003; scanned '+idle.last_scan+'</span>' : '<span style="color:var(--label-2);">not scanned yet</span>');
         const assocRows = all.length>0
             ? sortedAll.map(r=>{
                 const f=!!r.flagged;
                 const key = (r.employee_id || r.login || '').toString();
                 const open = _idleExpanded.has(key);
                 const fclm = r.fclm_url
-                    ? `<a href="${r.fclm_url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#0a84ff;text-decoration:none;font-weight:600;" title="Open FCLM Time Details for ${r.login||r.employee_id||''}">FCLM &#8599;</a>`
-                    : '<span style="color:#48484a;">—</span>';
+                    ? `<a href="${r.fclm_url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-weight:600;" title="Open FCLM Time Details for ${r.login||r.employee_id||''}">FCLM &#8599;</a>`
+                    : '<span style="color:var(--label-4);">—</span>';
                 // Shares of TOTAL SHIFT time: green=productive, red=idle, the
                 // dark remainder = indirect/other (meetings/training/etc).
                 const ip = (typeof r.idle_pct==='number')?r.idle_pct:0;
                 const pp = (typeof r.prod_pct==='number')?r.prod_pct:0;
-                const pctBar = `<div style="display:flex;align-items:center;gap:8px;">
-                    <div style="flex:1;min-width:70px;height:8px;border-radius:4px;overflow:hidden;background:#2c2c2e;display:flex;">
-                        <div style="width:${pp}%;background:#30d158;"></div>
-                        <div style="width:${ip}%;background:#ff453a;"></div>
+                const pctBar = `<div class="idle-bar">
+                    <div class="track">
+                        <div class="seg-prod" style="width:${pp}%;"></div>
+                        <div class="seg-idle" style="width:${ip}%;"></div>
                     </div>
-                    <span style="color:${ip>=50?'#ff453a':'#c7c7cc'};font-size:0.72rem;min-width:38px;text-align:right;">${ip.toFixed(0)}%</span>
+                    <span class="pct" style="color:${ip>=50?'var(--red)':'var(--label-2)'};">${ip.toFixed(0)}%</span>
                 </div>`;
                 const caret = (r.gaps && r.gaps.length)
-                    ? `<span style="display:inline-block;width:12px;color:#8e8e93;transform:rotate(${open?90:0}deg);transition:transform .15s;">&#9654;</span>`
-                    : '<span style="display:inline-block;width:12px;"></span>';
+                    ? `<span class="caret ${open?'open':''}">&#9654;</span>`
+                    : '<span class="caret" style="visibility:hidden;">&#9654;</span>';
                 const mainRow = `<tr onclick="toggleIdleRow('${key}')" style="cursor:${(r.gaps&&r.gaps.length)?'pointer':'default'};">
-                    <td style="color:#ffffff;">${caret} ${r.login||'—'}</td>
-                    <td style="color:${f?'#ff453a':'#98989d'};font-weight:${f?'700':'400'};">${fmt(r.idle_min)}</td>
-                    <td style="color:#c7c7cc;">${fmt(r.shift_min)}</td>
-                    <td style="min-width:120px;">${pctBar}</td>
-                    <td>${f?'<span style="color:#ff453a;font-weight:600;">&#9888; Need STU</span>':'<span style="color:#4ade80;">Good</span>'}</td>
+                    <td>${caret} ${r.login||'—'}</td>
+                    <td style="color:${f?'var(--red)':'var(--label-2)'};font-weight:${f?'600':'400'};">${fmt(r.idle_min)}</td>
+                    <td class="muted">${fmt(r.shift_min)}</td>
+                    <td style="min-width:160px;">${pctBar}</td>
+                    <td>${f?'<span class="rate-pill below">&#9888; Need STU</span>':'<span class="rate-pill above">Good</span>'}</td>
                     <td>${fclm}</td>
                 </tr>`;
                 // Expanded detail: this AA's idle gaps, highest -> lowest.
                 let detail = '';
                 if (open && r.gaps && r.gaps.length) {
                     const gapRows = r.gaps.map((g,i)=>`<tr>
-                        <td style="color:#636366;padding-left:28px;">#${i+1}</td>
-                        <td style="color:${g.minutes>=thr?'#ff453a':'#c7c7cc'};font-weight:${g.minutes>=thr?'700':'400'};">${fmt(g.minutes)}</td>
-                        <td style="color:#98989d;">${g.start} &ndash; ${g.end}</td>
-                        <td style="color:#8e8e93;">${g.path||'—'}</td>
+                        <td style="color:var(--label-3);padding-left:28px;">#${i+1}</td>
+                        <td style="color:${g.minutes>=thr?'var(--red)':'var(--label-2)'};font-weight:${g.minutes>=thr?'700':'400'};">${fmt(g.minutes)}</td>
+                        <td style="color:var(--label-2);">${g.start} &ndash; ${g.end}</td>
+                        <td style="color:var(--label-2);">${g.path||'—'}</td>
                     </tr>`).join('');
-                    detail = `<tr><td colspan="6" style="padding:0 0 10px 0;background:#1c1c1e;">
-                        <table class="assoc-table" style="margin:0;background:transparent;">
+                    detail = `<tr><td colspan="6" style="padding:0 0 var(--sp-2) 0;background:rgba(255,255,255,0.025);">
+                        <table class="assoc-table idle-table gaps" style="margin:0;background:transparent;font-size:var(--fs-footnote);">
                             <thead><tr>
                                 <th style="padding-left:28px;">Gap</th><th>Duration</th><th>Window</th><th>Path</th>
                             </tr></thead>
@@ -1040,35 +1405,34 @@
                 }
                 return mainRow + detail;
               }).join('')
-            : `<tr><td colspan="6" style="color:#636366;text-align:center;padding:20px;">${idle.scanning?('Scanning idle time… '+((idle.scan_total)?((idle.scan_done||0)+'/'+idle.scan_total):'')):'No idle data yet — it populates a few seconds after each FCLM pull.'}</td></tr>`;
+            : `<tr><td colspan="6" style="color:var(--label-3);text-align:center;padding:20px;">${idle.scanning?('Scanning idle time… '+((idle.scan_total)?((idle.scan_done||0)+'/'+idle.scan_total):'')):'No idle data yet — it populates a few seconds after each FCLM pull.'}</td></tr>`;
         // Shift-wide roll-up: total idle vs total direct across all scanned AAs.
         const totDirect = all.reduce((s,r)=>s+(r.direct_min||0),0);
         const totIdle = all.reduce((s,r)=>s+(r.total_idle_min||0),0);
         const totActive = totDirect + totIdle;
         const fleetIdlePct = totActive>0 ? (totIdle/totActive*100) : 0;
         const rollup = all.length>0
-            ? `<div style="display:flex;gap:16px;align-items:center;margin-bottom:14px;flex-wrap:wrap;font-size:0.75rem;">
-                 <span style="color:#98989d;">Shift totals:</span>
-                 <span style="color:#30d158;">Productive ${fmt(totDirect)}</span>
-                 <span style="color:#ff453a;">Idle ${fmt(totIdle)}</span>
-                 <span style="color:${fleetIdlePct>=25?'#ff453a':'#c7c7cc'};font-weight:600;">${fleetIdlePct.toFixed(1)}% idle</span>
+            ? `<div class="row mb-4" style="gap:var(--sp-4);font-size:var(--fs-footnote);">
+                 <span class="muted">Shift totals</span>
+                 <span style="color:var(--green);">Productive ${fmt(totDirect)}</span>
+                 <span style="color:var(--red);">Idle ${fmt(totIdle)}</span>
+                 <span style="color:${fleetIdlePct>=25?'var(--red)':'var(--label-2)'};font-weight:600;">${fleetIdlePct.toFixed(1)}% idle</span>
                </div>`
             : '';
-        return `<div style="background:rgba(44,44,46,0.95);border:1px solid #38383a;border-radius:12px;padding:20px;">
-            <div style="display:flex;gap:12px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
-                <h3 style="color:#ffffff;font-size:1rem;">Idle Time</h3>
-                <span style="color:#ff453a;font-size:0.8rem;font-weight:600;">${flagged.length} flagged &ge; ${thr} min</span>
-                <span style="font-size:0.7rem;">${scanLbl}</span>
+        return `<div class="panel">
+            <div class="panel-head">
+                <h3>Idle Time</h3>
+                <span class="rate-pill below">${flagged.length} flagged &ge; ${thr} min</span>
+                <span style="font-size:var(--fs-caption1);">${scanLbl}</span>
             </div>
-            <div style="color:#98989d;font-size:0.68rem;margin-bottom:14px;">
+            <div class="panel-note">
                 Flags the single longest <b>continuous</b> idle gap — paid on-clock time not covered by a direct pick path.
                 Training / meetings / indirect time is excluded (it is neither idle nor does it bridge a gap).
             </div>
-            ${bpHtml}
-            <div style="color:#c7c7cc;font-size:0.72rem;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">By Associate</div>
+            <div class="section-title">By Associate</div>
             ${rollup}
-            <table class="assoc-table">
-                <thead><tr><th>Login</th><th>Longest Gap</th><th>Total Shift</th><th>Idle % of Shift</th><th ondblclick="sortIdleByStatus()" title="Double-click to sort by status" style="cursor:pointer;user-select:none;">Status${_idleStatusSort?('<span style="color:#8e8e93;font-size:0.7em;margin-left:4px;">'+(_idleStatusSort==='need'?'&#9650;':'&#9660;')+'</span>'):''}</th><th>Verify</th></tr></thead>
+            <table class="assoc-table idle-table by-assoc">
+                <thead><tr><th>Login</th><th>Longest Gap</th><th>Total Shift</th><th>Idle % of Shift</th><th class="th-sortable ${_idleStatusSort?'is-sorted':''}" ondblclick="sortIdleByStatus()" title="Double-click to group by status (Need STU / Good)"><span class="th-label">Status</span><span class="th-sort" aria-hidden="true">${_idleStatusSort?(_idleStatusSort==='need'?'&#9650;':'&#9660;'):'&#8645;'}</span></th><th>Verify</th></tr></thead>
                 <tbody>${assocRows}</tbody>
             </table>
         </div>`;
@@ -1089,9 +1453,14 @@
             if (panel && selectedPath === 'idle') {
                 panel.innerHTML = buildIdlePanel(idle);
             }
-            // Live-refresh the Idle tab badge count (if the tab bar is rendered).
+            // Live-refresh the Idle tab badge count (if the tab bar is rendered),
+            // and keep its alert/ok state dot in step with the count.
             const tabBadge = document.getElementById('idleTabCount');
-            if (tabBadge) tabBadge.textContent = flaggedCount + ' flagged';
+            if (tabBadge) {
+                tabBadge.textContent = flaggedCount + ' flagged';
+                const tab = tabBadge.closest('.path-tab');
+                if (tab) { tab.classList.toggle('alert', flaggedCount > 0); tab.classList.toggle('ok', flaggedCount === 0); }
+            }
             // Live-refresh the Overview summary chip count (visible on any tab).
             const chip = document.getElementById('idleChipCount');
             if (chip) chip.textContent = flaggedCount;
@@ -1153,7 +1522,7 @@
         const matches=[...allLogins].filter(l=>l.toLowerCase().includes(q)).slice(0,8);
         if(matches.length===0){box.style.display='none';return;}
         box.style.display='block';
-        box.innerHTML=matches.map(m=>`<div onclick="selectAttrSuggestion('${m}')" style="padding:6px 12px;cursor:pointer;font-size:0.78rem;color:#e5e5ea;border-bottom:1px solid #38383a;" onmouseover="this.style.background='#3a3a3c'" onmouseout="this.style.background=''">${m}</div>`).join('');
+        box.innerHTML=matches.map(m=>`<div onclick="selectAttrSuggestion('${m}')" style="padding:6px 12px;cursor:pointer;font-size:0.78rem;color:var(--label-1);border-bottom:1px solid var(--hairline);" onmouseover="this.style.background='var(--fill-3)'" onmouseout="this.style.background=''">${m}</div>`).join('');
     }
 
     function selectAttrSuggestion(login){
@@ -1193,13 +1562,13 @@
                 if(stats.avg_rate>=goal) goodPaths.push({path:pw,rate:stats.avg_rate,goal,shifts:stats.shifts});
                 else badPaths.push({path:pw,rate:stats.avg_rate,goal,shifts:stats.shifts});
             }
-            if(currentPathRate) tipContent+=`<div style="color:#98989d;margin-bottom:4px;">Current: ${p.name} ${currentPathRate.avg_rate} UPH (${currentPathRate.shifts} shifts)</div>`;
+            if(currentPathRate) tipContent+=`<div style="color:var(--label-2);margin-bottom:4px;">Current: ${p.name} ${currentPathRate.avg_rate} UPH (${currentPathRate.shifts} shifts)</div>`;
             if(goodPaths.length>0){tipContent+=`<div class="tip-title">STRENGTHS:</div>`;for(const g of goodPaths)tipContent+=`<div class="tip-yes">&#10003; ${g.path}: ${g.rate} avg (${g.shifts}d)</div>`;}
             if(badPaths.length>0){tipContent+=`<div class="tip-title" style="margin-top:4px;">OPPORTUNITIES:</div>`;for(const b of badPaths)tipContent+=`<div class="tip-no">&#10007; ${b.path}: ${b.rate} avg (${b.shifts}d)</div>`;}
-            if(!goodPaths.length&&!badPaths.length&&!currentPathRate) tipContent+=`<div style="color:#636366;">Collecting data...</div>`;
-        } else { tipContent=`<div style="color:#636366;">Collecting data...</div>`; }
+            if(!goodPaths.length&&!badPaths.length&&!currentPathRate) tipContent+=`<div style="color:var(--label-3);">Collecting data...</div>`;
+        } else { tipContent=`<div style="color:var(--label-3);">Collecting data...</div>`; }
         const rowClass=isInactive?`${pfc} inactive`:pfc;
-        return `<tr class="${rowClass}"><td class="has-tip">${a.name||''}<div class="tip-box">${tipContent}</div></td><td class="has-tip" style="color:#94a3b8;">${login}<div class="tip-box">${tipContent}</div></td><td><span class="rate-pill ${pfc}">${(a.rate||0).toFixed(1)}</span></td><td>${a.units||0}</td><td>${(a.paid_hours||0).toFixed(1)}</td><td><span class="ct-dots">${dots||'--'}</span></td><td><button onclick="event.stopPropagation();showRecommend('${a.employee_id}','${p.name}','${a.name||login}')" style="background:#3a3a3c;color:#e0e0e0;border:1px solid #38383a;border-radius:3px;padding:2px 6px;font-size:0.65rem;cursor:pointer;">${histDays?histDays+'d':'?'}</button></td></tr>`;
+        return `<tr class="${rowClass}"><td class="has-tip">${a.name||''}<div class="tip-box">${tipContent}</div></td><td class="has-tip">${login}<div class="tip-box">${tipContent}</div></td><td><span class="rate-pill ${pfc}">${(a.rate||0).toFixed(1)}</span></td><td>${a.units||0}</td><td>${(a.paid_hours||0).toFixed(1)}</td><td><span class="ct-dots">${dots||'--'}</span></td><td><button onclick="event.stopPropagation();showRecommend('${a.employee_id}','${p.name}','${a.name||login}')" class="mini-btn">${histDays?histDays+'d':'?'}</button></td></tr>`;
     }
 
     // Cross-training
@@ -1220,30 +1589,30 @@
             // Show path averages
             const avgs = hData.path_averages || {};
             if (Object.keys(avgs).length > 0) {
-                html += `<div style="margin-bottom:14px;"><strong style="color:#fff;">14-Day History (${Object.keys(avgs).length} paths worked):</strong></div>`;
+                html += `<div style="margin-bottom:14px;"><strong style="color:var(--label-1);">14-Day History (${Object.keys(avgs).length} paths worked):</strong></div>`;
                 html += '<table style="width:100%;border-collapse:collapse;font-size:0.75rem;margin-bottom:14px;">';
-                html += '<tr style="border-bottom:1px solid #48484a;"><th style="text-align:left;padding:6px 8px;color:#98989d;">Path</th><th style="text-align:right;padding:6px 8px;color:#98989d;">Avg Rate</th><th style="text-align:right;padding:6px 8px;color:#98989d;">Shifts</th><th style="text-align:right;padding:6px 8px;color:#98989d;">Range</th></tr>';
+                html += '<tr style="border-bottom:1px solid var(--label-4);"><th style="text-align:left;padding:6px 8px;color:var(--label-2);">Path</th><th style="text-align:right;padding:6px 8px;color:var(--label-2);">Avg Rate</th><th style="text-align:right;padding:6px 8px;color:var(--label-2);">Shifts</th><th style="text-align:right;padding:6px 8px;color:var(--label-2);">Range</th></tr>';
                 for (const [path, stats] of Object.entries(avgs)) {
-                    html += `<tr style="border-bottom:1px solid #38383a;"><td style="padding:6px 8px;color:#e5e5ea;">${path}</td><td style="text-align:right;padding:6px 8px;font-weight:600;color:#4ade80;">${stats.avg_rate}</td><td style="text-align:right;padding:6px 8px;color:#e5e5ea;">${stats.total_shifts}</td><td style="text-align:right;padding:6px 8px;color:#98989d;">${stats.min_rate} - ${stats.max_rate}</td></tr>`;
+                    html += `<tr style="border-bottom:1px solid var(--hairline);"><td style="padding:6px 8px;color:var(--label-1);">${path}</td><td style="text-align:right;padding:6px 8px;font-weight:600;color:var(--green);">${stats.avg_rate}</td><td style="text-align:right;padding:6px 8px;color:var(--label-1);">${stats.total_shifts}</td><td style="text-align:right;padding:6px 8px;color:var(--label-2);">${stats.min_rate} - ${stats.max_rate}</td></tr>`;
                 }
                 html += '</table>';
             } else {
-                html += '<p style="color:#94a3b8;margin-bottom:14px;">No historical data yet. Data collects automatically each shift.</p>';
+                html += '<p style="color:var(--label-2);margin-bottom:14px;">No historical data yet. Data collects automatically each shift.</p>';
             }
             
             // Show move recommendation form
             const paths = Object.keys(data.paths || {}).filter(p => p !== fromPath);
-            html += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #38383a;">`;
-            html += `<strong style="color:#fff;">Simulate Move from ${fromPath}:</strong>`;
+            html += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--hairline);">`;
+            html += `<strong style="color:var(--label-1);">Simulate Move from ${fromPath}:</strong>`;
             html += `<div style="display:flex;gap:8px;margin-top:8px;align-items:center;">`;
-            html += `<select id="recDestPath" style="background:#1c1c1e;border:1px solid #38383a;color:#e0e0e0;padding:4px 8px;border-radius:4px;font-size:0.75rem;">`;
+            html += `<select id="recDestPath" style="background:var(--bg-1);border:1px solid var(--hairline);color:var(--label-1);padding:4px 8px;border-radius:4px;font-size:0.75rem;">`;
             for (const p of paths) {
                 html += `<option value="${p}">${p}</option>`;
             }
             html += `</select>`;
-            html += `<span style="color:#64748b;font-size:0.7rem;">Goal:</span>`;
-            html += `<input type="number" id="recGoal" value="${getGoal(paths[0],5)}" style="width:50px;background:#1c1c1e;border:1px solid #38383a;color:#fff;padding:3px 6px;border-radius:3px;font-size:0.75rem;text-align:center;">`;
-            html += `<button onclick="runRecommend('${employeeId}','${fromPath}')" style="background:#2563eb;color:#fff;border:none;padding:4px 12px;border-radius:4px;font-size:0.75rem;cursor:pointer;">Analyze</button>`;
+            html += `<span style="color:var(--label-3);font-size:0.7rem;">Goal:</span>`;
+            html += `<input type="number" id="recGoal" value="${getGoal(paths[0],5)}" style="width:50px;background:var(--bg-1);border:1px solid var(--hairline);color:var(--label-1);padding:3px 6px;border-radius:3px;font-size:0.75rem;text-align:center;">`;
+            html += `<button onclick="runRecommend('${employeeId}','${fromPath}')" style="background:var(--blue);color:var(--label-1);border:none;padding:4px 12px;border-radius:4px;font-size:0.75rem;cursor:pointer;">Analyze</button>`;
             html += `</div>`;
             html += `<div id="recResult" style="margin-top:10px;"></div>`;
             html += `</div>`;
@@ -1258,7 +1627,7 @@
                 };
             }
         } catch(e) {
-            document.getElementById('recContent').innerHTML = '<p style="color:#f87171;">Error loading history.</p>';
+            document.getElementById('recContent').innerHTML = '<p style="color:var(--red);">Error loading history.</p>';
         }
     }
     
@@ -1276,22 +1645,22 @@
             const res = await r.json();
             const rec = res.recommendation;
             
-            let color = rec.verdict === 'GOOD MOVE' ? '#4ade80' : rec.verdict === 'OKAY MOVE' ? '#fbbf24' : rec.verdict === 'RISKY MOVE' ? '#f87171' : '#94a3b8';
-            let html = `<div style="margin-top:8px;padding:10px;background:#1c1c1e;border-radius:6px;border:1px solid #38383a;">`;
+            let color = rec.verdict === 'GOOD MOVE' ? 'var(--green)' : rec.verdict === 'OKAY MOVE' ? 'var(--yellow)' : rec.verdict === 'RISKY MOVE' ? 'var(--red)' : 'var(--label-2)';
+            let html = `<div style="margin-top:8px;padding:10px;background:var(--bg-1);border-radius:6px;border:1px solid var(--hairline);">`;
             html += `<div style="font-size:1rem;font-weight:700;color:${color};margin-bottom:6px;">${rec.verdict}</div>`;
-            html += `<div style="font-size:0.7rem;color:#64748b;margin-bottom:6px;">Confidence: ${rec.confidence}</div>`;
+            html += `<div style="font-size:0.7rem;color:var(--label-3);margin-bottom:6px;">Confidence: ${rec.confidence}</div>`;
             for (const reason of rec.reasoning || []) {
-                html += `<div style="font-size:0.75rem;color:#e0e0e0;margin-bottom:3px;">• ${reason}</div>`;
+                html += `<div style="font-size:0.75rem;color:var(--label-1);margin-bottom:3px;">• ${reason}</div>`;
             }
-            if (rec.dest_avg_rate) html += `<div style="margin-top:6px;font-size:0.75rem;color:#94a3b8;">Dest avg: ${rec.dest_avg_rate} UPH over ${rec.dest_shifts_worked} shifts</div>`;
-            if (rec.path_pair_insight) html += `<div style="margin-top:4px;font-size:0.7rem;color:#64748b;">Path pair: ${rec.path_pair_insight.success_rate}% success rate (${rec.path_pair_insight.total_moves} moves tracked)</div>`;
-            if (rec.learning_stats && rec.learning_stats.total_moves_logged > 0) html += `<div style="margin-top:4px;font-size:0.65rem;color:#475569;">System learning: ${rec.learning_stats.total_moves_logged} moves logged, ${rec.learning_stats.overall_success_rate}% overall success</div>`;
-            html += `<div style="margin-top:10px;"><button onclick="confirmMove('${employeeId}','${fromPath}','${toPath}',${goal})" style="background:#16a34a;color:#fff;border:none;padding:5px 14px;border-radius:4px;font-size:0.75rem;cursor:pointer;font-weight:500;">Confirm Move</button><span id="confirmMsg" style="margin-left:8px;font-size:0.7rem;color:#64748b;"></span></div>`;
+            if (rec.dest_avg_rate) html += `<div style="margin-top:6px;font-size:0.75rem;color:var(--label-2);">Dest avg: ${rec.dest_avg_rate} UPH over ${rec.dest_shifts_worked} shifts</div>`;
+            if (rec.path_pair_insight) html += `<div style="margin-top:4px;font-size:0.7rem;color:var(--label-3);">Path pair: ${rec.path_pair_insight.success_rate}% success rate (${rec.path_pair_insight.total_moves} moves tracked)</div>`;
+            if (rec.learning_stats && rec.learning_stats.total_moves_logged > 0) html += `<div style="margin-top:4px;font-size:0.65rem;color:var(--label-3);">System learning: ${rec.learning_stats.total_moves_logged} moves logged, ${rec.learning_stats.overall_success_rate}% overall success</div>`;
+            html += `<div style="margin-top:10px;"><button onclick="confirmMove('${employeeId}','${fromPath}','${toPath}',${goal})" style="background:var(--green);color:var(--label-1);border:none;padding:5px 14px;border-radius:4px;font-size:0.75rem;cursor:pointer;font-weight:500;">Confirm Move</button><span id="confirmMsg" style="margin-left:8px;font-size:0.7rem;color:var(--label-3);"></span></div>`;
             html += `</div>`;
             
             document.getElementById('recResult').innerHTML = html;
         } catch(e) {
-            document.getElementById('recResult').innerHTML = '<p style="color:#f87171;">Error getting recommendation.</p>';
+            document.getElementById('recResult').innerHTML = '<p style="color:var(--red);">Error getting recommendation.</p>';
         }
     }
     
@@ -1307,11 +1676,11 @@
             const res = await r.json();
             if (res.success) {
                 document.getElementById('confirmMsg').textContent = 'Move logged! System will track outcome.';
-                document.getElementById('confirmMsg').style.color = '#4ade80';
+                document.getElementById('confirmMsg').style.color = 'var(--green)';
             }
         } catch(e) {
             document.getElementById('confirmMsg').textContent = 'Error logging move.';
-            document.getElementById('confirmMsg').style.color = '#f87171';
+            document.getElementById('confirmMsg').style.color = 'var(--red)';
         }
     }
 
@@ -1412,16 +1781,16 @@
             await fetch(API+'/api/set-shift',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({shift:savedShift||autoShift})}).catch(()=>{});
             await new Promise(r=>setTimeout(r,500));
             if(await fetchData()){await fetchMoveLog();render();setStatus('ok','Loaded '+time());if(data.refresh_interval_minutes){refreshMin=data.refresh_interval_minutes;document.getElementById('refreshInterval').value=refreshMin;}}
-            else{setStatus('error','Failed to connect');document.getElementById('pathGrid').innerHTML='<div style="text-align:center;padding:60px;color:#64748b;grid-column:1/-1;"><h2 style="color:#94a3b8;">No Data</h2><p>Run: python staffing_dashboard_server.py</p></div>';}
+            else{setStatus('error','Failed to connect');document.getElementById('pathGrid').innerHTML='<div style="text-align:center;padding:60px;color:var(--label-3);grid-column:1/-1;"><h2 style="color:var(--label-2);">No Data</h2><p>Run: python staffing_dashboard_server.py</p></div>';}
         } catch(err) {
             console.error('Render error:', err);
             setStatus('error','JS Error: '+err.message);
-            document.getElementById('pathGrid').innerHTML='<div style="text-align:center;padding:40px;color:#f87171;grid-column:1/-1;"><h2>Render Error</h2><p>'+err.message+'</p><p style="margin-top:8px;color:#94a3b8;">Check browser console (F12) for details</p></div>';
+            document.getElementById('pathGrid').innerHTML='<div style="text-align:center;padding:40px;color:var(--red);grid-column:1/-1;"><h2>Render Error</h2><p>'+err.message+'</p><p style="margin-top:8px;color:var(--label-2);">Check browser console (F12) for details</p></div>';
         }
         showLoading(false);setupAutoRefresh();startHCPoller();loadSites();
     });
     </script>
-<div style="text-align:center;padding:12px;font-size:0.6rem;color:#636366;border-top:1px solid #38383a;margin-top:20px;">PickMatrix <span id="footerVer" id="footerVer"></span> | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>
+<div style="text-align:center;padding:12px;font-size:0.6rem;color:var(--label-3);border-top:1px solid var(--hairline);margin-top:20px;">PickMatrix <span id="footerVer" id="footerVer"></span> | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>
 <script>
 // Check for updates on load.
 // Uses raw.githubusercontent.com (CDN, no per-IP API rate limit) instead of
@@ -1436,18 +1805,18 @@ fetch('https://raw.githubusercontent.com/ttuyen099/pick-staffing-evaluator/main/
     fetch('/version.txt?t='+Date.now()).then(r=>r.text()).then(localVer=>{
         localVer=localVer.trim();
         const el=document.getElementById('updateStatus');
-        if(verNewer(remote,localVer)) el.innerHTML='<span style="color:#ff9500;">Update v'+remote+' available </span><button onclick="runUpdate()" style="background:#ff9500;color:#fff;border:none;padding:3px 10px;border-radius:4px;font-size:0.6rem;cursor:pointer;font-weight:600;">Update Now</button>';
-        else el.innerHTML='<span style="color:#4ade80;">&#10003; Up to date</span>';
+        if(verNewer(remote,localVer)) el.innerHTML='<span style="color:var(--orange);">Update v'+remote+' available </span><button onclick="runUpdate()" style="background:var(--orange);color:var(--label-1);border:none;padding:3px 10px;border-radius:4px;font-size:0.6rem;cursor:pointer;font-weight:600;">Update Now</button>';
+        else el.innerHTML='<span style="color:var(--green);">&#10003; Up to date</span>';
     });
 }).catch(()=>{document.getElementById('updateStatus').textContent='';});
 
 fetch("/version.txt").then(r=>r.text()).then(v=>{var el=document.getElementById("footerVer");if(el)el.textContent="v"+v.trim();}).catch(()=>{});
 function runUpdate(){
-    document.getElementById('updateStatus').innerHTML='<span style="color:#fbbf24;">Downloading update...</span>';
+    document.getElementById('updateStatus').innerHTML='<span style="color:var(--yellow);">Downloading update...</span>';
     fetch(API+'/api/run-update',{method:'POST'}).then(r=>r.json()).then(d=>{
-        if(d.success) document.getElementById('updateStatus').innerHTML='<span style="color:#4ade80;">Updated! Close this terminal and reopen Start Dashboard.bat</span>';
-        else document.getElementById('updateStatus').innerHTML='<span style="color:#ff453a;">Update failed.</span>';
-    }).catch(()=>{document.getElementById('updateStatus').innerHTML='<span style="color:#ff453a;">Update failed.</span>';});
+        if(d.success) document.getElementById('updateStatus').innerHTML='<span style="color:var(--green);">Updated! Close this terminal and reopen Start Dashboard.bat</span>';
+        else document.getElementById('updateStatus').innerHTML='<span style="color:var(--red);">Update failed.</span>';
+    }).catch(()=>{document.getElementById('updateStatus').innerHTML='<span style="color:var(--red);">Update failed.</span>';});
 }
 </script>
 </body>

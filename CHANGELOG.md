@@ -3,6 +3,61 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.6.0] — Apple-style dark UI remodel
+
+Front-end only (`staffing_dashboard.html`). No server or data changes; no
+restart needed — hard-refresh the browser after the launcher updates.
+
+### Changed
+- **Unified Apple dark design system.** Every colour now comes from a single
+  token set (`:root` CSS variables) using Apple's dark-mode system palette —
+  system green/red/blue/orange/yellow, the four-level label hierarchy
+  (white → 60% → 30% → 18%), fills, and hairline separators. The previous mix
+  of Apple greys and Tailwind utility colours (`#4ade80`, `#f87171`,
+  `#fbbf24`, slate greys…) is gone.
+- **Spacious, line-by-line readable tables.** Row padding 8px → 13px, 1px
+  hairline separators instead of solid borders, 15px base type with tabular
+  numerals so columns of numbers align, subtle fill on row hover. Nothing
+  renders below 11px any more (several labels were 6–7px).
+- **Status as dots, not stripes.** The coloured left-edge bar on rows, tabs
+  and path cards is replaced by a small status dot before the name; rate
+  values are tinted pills. Idle and Attrition tabs now carry a semantic dot
+  and coloured count (red when anyone is flagged / orange when anyone is
+  leaving early; green when clear) that updates live.
+- **Pill tabs, materials, motion.** Segmented pill tab bar (active = white on
+  black); translucent cards, bars, tooltip and modal with
+  `saturate(180%) blur(20px)` and a 1px hairline; the recommendation modal
+  animates in as a sheet; hover/press use Apple's standard easing at 180ms.
+  `prefers-reduced-motion` is respected.
+- **Typeface.** SF Pro where the OS provides it (macOS/iOS, or a local
+  install), otherwise **Inter** — the open-source SF-equivalent — loaded from
+  Google Fonts with `display=swap` and SF-style alternates enabled. If the
+  CDN is blocked or offline the page renders immediately in Segoe UI; nothing
+  stalls. (SF Pro itself cannot be bundled — Apple's licence limits it to
+  Apple-platform development.)
+- **Sortable Status header is discoverable.** The Idle "By Associate" Status
+  column shows a ⇅ glyph at rest, brightens on hover, and becomes a solid ▲/▼
+  once sorted (double-click still toggles Need STU / Good).
+
+### Removed
+- **"Idle by Path" table** from the Idle tab. The per-path attribution is
+  still computed server-side and still feeds the per-gap "Path" column when
+  you expand an associate; only the summary table is gone.
+
+### Fixed
+- Single-panel views (Idle, X-Train, Attrition) now span the full width
+  instead of rendering as one narrow grid cell.
+- Idle / X-Train / Attrition tables had inherited the 7-column associate
+  alignment and showed misaligned numbers; each now has its own alignment.
+- The X-Train / History status line under the summary chips was centred
+  instead of left-aligned.
+
+### Internal
+- ~220 inline `style="…"` attributes in the JS templates converted to design
+  system classes (`.panel`, `.panel-head`, `.section-title`, `.field`,
+  `.mini-btn`, `.idle-bar`, `.legend-bar`, `.modal-sheet`, `.banner-danger`,
+  `.th-sortable`, …). Generated HTML is smaller and themeable in one place.
+
 ## [2.5.7] — Reliability release
 
 Four fixes to the plumbing every other feature depends on. No visible UI
