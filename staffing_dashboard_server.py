@@ -352,7 +352,13 @@ class DataManager:
         # permissions), so we don't re-check the same people every 30s push.
         self._perms_attempted = set()
         # Single-flight guard: only one permission-verification thread at a time.
+        # Identifiers that arrive while a batch is in flight are parked in
+        # _perms_queued and drained when that batch finishes (previously they
+        # were dropped and only retried on the NEXT call for that same source -
+        # for FCLM employee_ids that meant the next 15-min fetch, since console
+        # pushes every ~30s always won the race at startup).
         self._perms_verifying = False
+        self._perms_queued = set()
         self._perms_lock = threading.Lock()
         # Login lookup (FCLM timeDetails) attempt tracking + single-flight guard.
         self._login_attempted = set()
@@ -504,7 +510,11 @@ class DataManager:
         identifiers = {str(i).strip() for i in (identifiers or set()) if str(i).strip()}
         with self._perms_lock:
             pending = {i for i in identifiers if i not in self._perms_attempted}
-            if not pending or self._perms_verifying:
+            if not pending:
+                return
+            if self._perms_verifying:
+                # Park them; the running batch drains the queue when it finishes.
+                self._perms_queued |= pending
                 return
             # Mark as attempted up front so concurrent pushes don't re-queue them.
             self._perms_attempted |= pending
@@ -546,6 +556,11 @@ class DataManager:
             finally:
                 with self._perms_lock:
                     self._perms_verifying = False
+                    queued, self._perms_queued = self._perms_queued, set()
+                if queued:
+                    # Identifiers that arrived mid-flight (e.g. FCLM employee_ids
+                    # queued while a console-login batch was running).
+                    self._verify_permissions_background(queued)
 
         threading.Thread(target=_do_check, daemon=True).start()
     

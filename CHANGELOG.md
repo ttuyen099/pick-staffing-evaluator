@@ -3,6 +3,53 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.6.2] — X-Train counts, History status, editable border colors
+
+Server and front-end changes. Restart the dashboard after the launcher
+updates, then hard-refresh the browser.
+
+### Added
+- **Appearance panel (border colors).** New "Appearance" button in the top
+  bar opens a sheet with one row per border type — panels & cards, card
+  hover, table rows, table headers, section dividers, top bars, popovers &
+  modals. Each has a full color picker and an opacity slider (0–100%), so you
+  can keep the subtle hairline look or make any border solid in any color.
+  Changes apply instantly, persist in the browser (`localStorage`), and
+  "Reset to defaults" restores the stock look. Nothing is sent to the server;
+  settings are per browser/user. Defaults are unchanged.
+
+### Fixed
+- **X-Train showed "✓ N verified" but every X → Stow/Pack/… chip read 0, and
+  associate rows had no cross-training dots.** Permission results are keyed
+  by whatever identifier was checked: employee_id for FCLM-sourced rows,
+  login for Picking-Console-sourced rows. The chips and the per-row dots only
+  looked up by employee_id, so console-sourced results (the majority at
+  startup) never matched. Both now fall back to the login.
+- **FCLM employee_ids were dropped from permission verification at startup.**
+  The single-flight guard discarded any identifiers that arrived while a
+  batch was already running; with the server now handling console pushes
+  concurrently (2.5.7), the ~30 s console-login batch always won the race and
+  the employee_id batch from the FCLM fetch was thrown away until the next
+  15-minute cycle. Identifiers arriving mid-flight are now queued and run as
+  a follow-up batch as soon as the current one finishes.
+- **History status stuck on "Idle" / backfill silently failing with
+  "database is locked".** The startup backfill, `record_shift_data`, and the
+  console-push writes (`move_log`, `employee_login_map`) all share one SQLite
+  file and now run concurrently; SQLite's default 5-second busy timeout was
+  not enough and the backfill thread died for the rest of the session.
+  Busy timeout raised to 30 s in both DB modules. The History status line now
+  shows a red "⚠ Backfill failed — <reason>" when the backfill errors instead
+  of a grey "Idle".
+- **Path Move Log header blended into rows while scrolling.** The sticky
+  header had a transparent background; it is now opaque with a 1 px
+  separator shadow.
+
+### Internal
+- All 27 border/divider declarations in `staffing_dashboard.html` routed
+  through seven `--b-*` CSS tokens (`--b-card`, `--b-card-hover`, `--b-row`,
+  `--b-head`, `--b-divider`, `--b-bar`, `--b-popover`). No raw `--hairline`/
+  `--sep`/`rgba(255,255,255,…)` border values remain.
+
 ## [2.6.1] — X-Train: false "Midway session expired"
 
 Server-side fix in `cross_training.py`. Restart the dashboard after the

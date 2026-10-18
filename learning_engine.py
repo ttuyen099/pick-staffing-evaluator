@@ -67,7 +67,8 @@ def to_console_path(name):
 
 def _get_db():
     """Get DB connection with learning tables."""
-    conn = sqlite3.connect(DB_PATH)
+    # 30s busy timeout - see rate_history.get_db(); same DB file.
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
     
     # Move decisions log

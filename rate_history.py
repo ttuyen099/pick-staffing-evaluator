@@ -34,7 +34,12 @@ RETENTION_DAYS = 30
 
 def get_db():
     """Get a database connection, creating tables if needed."""
-    conn = sqlite3.connect(DB_PATH)
+    # 30s busy timeout (default 5s): since 2.5.7 the server handles requests
+    # concurrently, so console-push writes (move_log, employee_login_map),
+    # record_shift_data and the startup backfill can all contend for the same
+    # DB file. A short timeout surfaced as "database is locked" and killed the
+    # backfill for the whole session.
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS rate_history (

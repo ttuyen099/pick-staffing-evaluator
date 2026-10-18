@@ -50,6 +50,19 @@
             --sep-opaque:     #38383a;
             --hairline:       rgba(255, 255, 255, 0.08);
 
+            /* Border tokens - user-editable via the Appearance panel (stored
+               in localStorage, applied as inline overrides on :root at boot).
+               Every border/divider in the UI goes through one of these.
+               Defaults mirror --hairline / --sep. Keep the names and the
+               BORDER_TYPES list in the script block in sync. */
+            --b-card:         rgba(255, 255, 255, 0.08);  /* panel / card / chip outline  */
+            --b-card-hover:   rgba(255, 255, 255, 0.12);  /* path-card hover outline      */
+            --b-row:          rgba(255, 255, 255, 0.08);  /* table row separators         */
+            --b-head:         rgba(84, 84, 88, 0.65);     /* table header underline       */
+            --b-divider:      rgba(255, 255, 255, 0.08);  /* section dividers inside cards*/
+            --b-bar:          rgba(255, 255, 255, 0.08);  /* top bar / legend / tab bar   */
+            --b-popover:      rgba(255, 255, 255, 0.12);  /* tooltip / modal / dropdown   */
+
             /* System colors (dark variants) */
             --blue:           #0a84ff;
             --green:          #30d158;
@@ -151,7 +164,7 @@
             position: sticky; top: 0; z-index: 100;
             background: var(--mat-bar);
             -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
-            border-bottom: 1px solid var(--hairline);
+            border-bottom: 1px solid var(--b-bar);
             padding: var(--sp-3) var(--sp-6);
             min-height: var(--bar-h);
             display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
@@ -205,7 +218,7 @@
         .legend-bar {
             display: flex; gap: var(--sp-4); padding: var(--sp-2) var(--sp-6);
             background: var(--bg-1);
-            border-bottom: 1px solid var(--hairline);
+            border-bottom: 1px solid var(--b-bar);
             font-size: var(--fs-caption1); color: var(--label-2);
             flex-wrap: wrap; align-items: center;
         }
@@ -223,7 +236,7 @@
         .chip {
             background: var(--mat-card);
             -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
-            border: 1px solid var(--hairline);
+            border: 1px solid var(--b-card);
             border-radius: var(--r-md);
             padding: var(--sp-3) var(--sp-4);
             min-width: 112px;
@@ -244,7 +257,14 @@
         .overview-cols.single .overview-left { display: none; }
         .overview-left { position: sticky; top: calc(var(--bar-h) + 56px + var(--sp-3)); }
         .overview-right { min-width: 0; }
-        #moveLogTableWrap thead th { position: sticky; top: 0; z-index: 2; }
+        /* Sticky move-log header: must be opaque (the shared th style is
+           transparent) or scrolled rows bleed through the column labels.
+           --bg-1 matches the panel's --mat-card composited over the black page. */
+        #moveLogTableWrap thead th {
+            position: sticky; top: 0; z-index: 2;
+            background: var(--bg-1);
+            box-shadow: 0 1px 0 var(--b-head);
+        }
         @media (max-width: 1100px) { .overview-cols { grid-template-columns: 1fr; } .overview-left { position: static; } }
 
         /* ---------- Segmented path tabs (pill bar) ---------- */
@@ -252,7 +272,7 @@
             display: flex; gap: var(--sp-2); padding: var(--sp-3) var(--sp-6);
             background: var(--mat-bar);
             -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
-            border-bottom: 1px solid var(--hairline);
+            border-bottom: 1px solid var(--b-bar);
             flex-wrap: wrap; position: sticky; top: var(--tabs-top); z-index: 90;
             margin: 0 calc(-1 * var(--sp-6)) var(--sp-5);
         }
@@ -287,13 +307,13 @@
         .path-card {
             background: var(--mat-card);
             -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
-            border: 1px solid var(--hairline);
+            border: 1px solid var(--b-card);
             border-radius: var(--r-lg);
             padding: var(--sp-4) var(--sp-5) var(--sp-4);
             position: relative; cursor: pointer; overflow: visible;
             transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
         }
-        .path-card:hover { background: var(--mat-card-2); border-color: rgba(255,255,255,0.12); }
+        .path-card:hover { background: var(--mat-card-2); border-color: var(--b-card-hover); }
 
         .path-top { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); }
         .path-name { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; font-size: var(--fs-body); color: var(--label-1); letter-spacing: -0.01em; min-width: 0; }
@@ -360,7 +380,7 @@
         .path-footer .val.pos { color: var(--green); }
         .path-footer .val.neg { color: var(--red); }
 
-        .path-expand { display: none; margin-top: var(--sp-4); border-top: 1px solid var(--hairline); padding-top: var(--sp-3); overflow: visible; }
+        .path-expand { display: none; margin-top: var(--sp-4); border-top: 1px solid var(--b-divider); padding-top: var(--sp-3); overflow: visible; }
         .path-expand.open { display: block; }
 
         /* ---------- Tables (spacious, inset-grouped style) ---------- */
@@ -374,7 +394,7 @@
             text-align: left;
             font-size: var(--fs-caption1); font-weight: 600; letter-spacing: 0.02em;
             color: var(--label-3);
-            border-bottom: 1px solid var(--sep);
+            border-bottom: 1px solid var(--b-head);
             background: transparent;
             white-space: nowrap;
             text-transform: none;
@@ -388,7 +408,7 @@
         .assoc-table th:nth-child(7) { text-align: center; }
         .assoc-table td, .movelog-table td {
             padding: var(--row-pad-y) var(--row-pad-x);
-            border-bottom: 1px solid var(--hairline);
+            border-bottom: 1px solid var(--b-row);
             vertical-align: middle;
             line-height: 1.35;
             transition: background var(--dur) var(--ease);
@@ -460,7 +480,7 @@
         .panel {
             background: var(--mat-card);
             -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
-            border: 1px solid var(--hairline); border-radius: var(--r-lg); padding: var(--sp-5) var(--sp-5) var(--sp-4);
+            border: 1px solid var(--b-card); border-radius: var(--r-lg); padding: var(--sp-5) var(--sp-5) var(--sp-4);
         }
         .panel-head { display: flex; gap: var(--sp-3); align-items: center; margin-bottom: var(--sp-2); flex-wrap: wrap; }
         .panel-head h3 { color: var(--label-1); font-size: var(--fs-title3); }
@@ -495,12 +515,12 @@
         .live-badge.off { background: var(--fill-4); color: var(--label-3); }
 
         /* Cross-training section */
-        .ct-section { margin-top: var(--sp-5); background: var(--mat-card); -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur); border: 1px solid var(--hairline); border-radius: var(--r-lg); overflow: hidden; }
+        .ct-section { margin-top: var(--sp-5); background: var(--mat-card); -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur); border: 1px solid var(--b-card); border-radius: var(--r-lg); overflow: hidden; }
         .ct-head { padding: var(--sp-4) var(--sp-5); display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background var(--dur) var(--ease); }
         .ct-head:hover { background: var(--fill-4); }
         .ct-head h3 { font-size: var(--fs-subhead); font-weight: 600; color: var(--label-1); }
         .ct-head .ct-toggle { font-size: var(--fs-caption1); color: var(--label-2); }
-        .ct-body { display: none; padding: var(--sp-4) var(--sp-5); border-top: 1px solid var(--hairline); }
+        .ct-body { display: none; padding: var(--sp-4) var(--sp-5); border-top: 1px solid var(--b-divider); }
         .ct-body.open { display: block; }
         .ct-legend { display: flex; gap: var(--sp-3); margin-bottom: var(--sp-3); font-size: var(--fs-caption1); color: var(--label-2); flex-wrap: wrap; }
         .ct-legend-item { display: flex; align-items: center; gap: 5px; }
@@ -525,7 +545,7 @@
             display: none; position: fixed; z-index: 3000;
             background: rgba(44, 44, 46, 0.94);
             -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
-            border: 1px solid rgba(255,255,255,0.12); border-radius: var(--r-md);
+            border: 1px solid var(--b-popover); border-radius: var(--r-md);
             padding: var(--sp-3) var(--sp-4);
             font-size: var(--fs-footnote); line-height: 1.45; white-space: nowrap;
             box-shadow: 0 12px 40px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.04) inset;
@@ -540,7 +560,7 @@
         /* Modal (sheet) */
         .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); z-index: 2000; align-items: center; justify-content: center; }
         .modal-sheet {
-            background: rgba(44,44,46,0.96); border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(44,44,46,0.96); border: 1px solid var(--b-popover);
             border-radius: var(--r-xl); padding: var(--sp-6);
             max-width: 560px; width: 92%; max-height: 82vh; overflow-y: auto;
             box-shadow: 0 24px 80px rgba(0,0,0,0.6);
@@ -552,6 +572,28 @@
         .modal-close { background: var(--fill-3); border: 0; color: var(--label-1); font-size: var(--fs-footnote); font-weight: 600; width: 30px; height: 30px; border-radius: 50%; line-height: 30px; text-align: center; transition: background var(--dur) var(--ease); }
         .modal-close:hover { background: var(--fill-2); }
         .modal-body { font-size: var(--fs-footnote); color: var(--label-2); line-height: 1.5; }
+
+        /* Appearance panel (border colors) */
+        .ap-note { margin: 0 0 var(--sp-4); color: var(--label-2); }
+        .ap-row {
+            display: grid; grid-template-columns: 1fr auto auto auto; align-items: center;
+            gap: var(--sp-3); padding: 10px 0; border-bottom: 1px solid var(--b-row);
+        }
+        .ap-row:last-child { border-bottom: 0; }
+        .ap-row .ap-name { color: var(--label-1); font-weight: 500; font-size: var(--fs-subhead); }
+        .ap-row .ap-desc { color: var(--label-3); font-size: var(--fs-caption1); margin-top: 2px; }
+        .ap-swatch {
+            width: 34px; height: 34px; padding: 0; border: 1px solid var(--b-popover); border-radius: var(--r-sm);
+            background: var(--fill-4); cursor: pointer;
+        }
+        .ap-swatch::-webkit-color-swatch-wrapper { padding: 3px; }
+        .ap-swatch::-webkit-color-swatch { border: 0; border-radius: 4px; }
+        .ap-swatch::-moz-color-swatch { border: 0; border-radius: 4px; }
+        .ap-alpha { display: flex; align-items: center; gap: 8px; }
+        .ap-alpha input[type=range] { width: 120px; accent-color: var(--blue); }
+        .ap-alpha .ap-pct { width: 38px; text-align: right; color: var(--label-2); font-variant-numeric: tabular-nums; font-size: var(--fs-caption1); }
+        .ap-preview { width: 54px; height: 22px; border-radius: 4px; background: var(--bg-1); border: 1px solid transparent; }
+        .ap-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); margin-top: var(--sp-5); }
 
         /* Banner */
         .banner-danger { background: var(--red-tint); color: var(--red); border: 1px solid rgba(255,69,58,0.35); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); margin: 0 0 var(--sp-4); font-size: var(--fs-footnote); font-weight: 500; line-height: 1.45; }
@@ -616,6 +658,7 @@
             </select>
         </div>
         <button class="btn secondary" onclick="manualRefresh()">Refresh Now</button>
+        <button class="btn secondary" onclick="openAppearance()" title="Border colors">Appearance</button>
         <div class="status-area">
             <div class="status-dot" id="statusDot"></div>
             <span id="statusText">Loading...</span>
@@ -665,8 +708,127 @@
         </div>
     </div>
 
+    <div id="appearanceModal" class="modal-backdrop" style="display:none;" onclick="closeAppearance()">
+        <div class="modal-sheet" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3>Appearance &mdash; Borders</h3>
+                <button class="modal-close" onclick="closeAppearance()" aria-label="Close">&#10005;</button>
+            </div>
+            <div class="modal-body">
+                <p class="ap-note">Pick any color for each border type. Opacity lets you keep the subtle hairline look or make a border solid. Changes apply instantly and are saved in this browser only.</p>
+                <div id="appearanceRows"></div>
+                <div class="ap-actions">
+                    <button class="btn secondary" onclick="resetAppearance()">Reset to defaults</button>
+                    <button class="btn" onclick="closeAppearance()">Done</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
     let data = null, refreshTimer = null, countdownTimer = null, nextRefresh = null, refreshMin = 15;
+
+    // ============================================================
+    // Appearance: user-editable border colors
+    // Each entry maps a :root CSS variable (see "Border tokens" in <style>)
+    // to a label. Values are stored as {hex:'#rrggbb', a:0..1} in
+    // localStorage under APPEARANCE_KEY and applied as inline custom
+    // properties on <html>, which override the stylesheet defaults.
+    // ============================================================
+    const APPEARANCE_KEY = 'pm_appearance_v1';
+    const BORDER_TYPES = [
+        { v: '--b-card',       name: 'Panels & cards',      desc: 'Outline of panels, path cards, summary chips, inputs' },
+        { v: '--b-card-hover', name: 'Card hover',          desc: 'Path card outline while hovered' },
+        { v: '--b-row',        name: 'Table rows',          desc: 'Separator between associate / move-log rows' },
+        { v: '--b-head',       name: 'Table headers',       desc: 'Underline beneath column headers' },
+        { v: '--b-divider',    name: 'Section dividers',    desc: 'Lines inside cards, move-log toolbar, footer' },
+        { v: '--b-bar',        name: 'Top bars',            desc: 'Bottom edge of the control bar, legend, and tab bar' },
+        { v: '--b-popover',    name: 'Popovers & modals',   desc: 'Tooltips, dialogs, dropdown suggestions' },
+    ];
+    // Defaults read from the stylesheet once so the panel's "reset" matches
+    // whatever :root declares (no duplicated magic numbers here).
+    const _apDefaults = {};
+    function apDefault(v){
+        if(!_apDefaults[v]){
+            const raw = getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+            _apDefaults[v] = apParse(raw) || { hex: '#ffffff', a: 0.08 };
+        }
+        return _apDefaults[v];
+    }
+    // Parse "rgba(r,g,b,a)" | "rgb(r,g,b)" | "#rgb" | "#rrggbb" | "#rrggbbaa" -> {hex, a}
+    function apParse(s){
+        if(!s) return null;
+        let m = s.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)/i);
+        if(m){ return { hex: apHex(+m[1], +m[2], +m[3]), a: m[4] === undefined ? 1 : Math.min(1, Math.max(0, parseFloat(m[4]))) }; }
+        m = s.match(/^#([0-9a-f]{3,8})$/i);
+        if(m){
+            let h = m[1];
+            if(h.length === 3 || h.length === 4) h = h.split('').map(c => c + c).join('');
+            const a = h.length === 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1;
+            return { hex: '#' + h.slice(0, 6).toLowerCase(), a };
+        }
+        return null;
+    }
+    function apHex(r, g, b){ return '#' + [r, g, b].map(n => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0')).join(''); }
+    function apCss({ hex, a }){
+        const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${Math.round(a * 1000) / 1000})`;
+    }
+    function apLoad(){
+        try { const o = JSON.parse(localStorage.getItem(APPEARANCE_KEY) || '{}'); return (o && typeof o === 'object') ? o : {}; }
+        catch(e){ return {}; }
+    }
+    function apSave(o){
+        try { if(Object.keys(o).length) localStorage.setItem(APPEARANCE_KEY, JSON.stringify(o)); else localStorage.removeItem(APPEARANCE_KEY); }
+        catch(e){ /* storage full / disabled: overrides still apply for this session */ }
+    }
+    // Apply saved overrides to :root. Runs at script start (before first render)
+    // so there's no flash of default borders.
+    function applyAppearance(){
+        const o = apLoad(), root = document.documentElement.style;
+        for(const t of BORDER_TYPES){
+            const val = o[t.v];
+            if(val && /^#[0-9a-f]{6}$/i.test(val.hex || '') && typeof val.a === 'number') root.setProperty(t.v, apCss(val));
+            else root.removeProperty(t.v);
+        }
+    }
+    applyAppearance();
+
+    function openAppearance(){
+        const o = apLoad();
+        const rows = document.getElementById('appearanceRows');
+        rows.innerHTML = BORDER_TYPES.map(t => {
+            const cur = o[t.v] || apDefault(t.v);
+            const pct = Math.round(cur.a * 100);
+            return `<div class="ap-row" data-var="${t.v}">
+                <div><div class="ap-name">${t.name}</div><div class="ap-desc">${t.desc}</div></div>
+                <input type="color" class="ap-swatch" value="${cur.hex}" title="Color" oninput="apChange('${t.v}')">
+                <div class="ap-alpha"><input type="range" min="0" max="100" step="1" value="${pct}" title="Opacity" oninput="apChange('${t.v}')"><span class="ap-pct">${pct}%</span></div>
+                <div class="ap-preview" style="border-color:${apCss(cur)}"></div>
+            </div>`;
+        }).join('');
+        document.getElementById('appearanceModal').style.display = 'flex';
+    }
+    function closeAppearance(){ document.getElementById('appearanceModal').style.display = 'none'; }
+    function apChange(v){
+        const row = document.querySelector(`.ap-row[data-var="${v}"]`);
+        if(!row) return;
+        const hex = row.querySelector('input[type=color]').value.toLowerCase();
+        const a = (+row.querySelector('input[type=range]').value) / 100;
+        row.querySelector('.ap-pct').textContent = Math.round(a * 100) + '%';
+        const val = { hex, a };
+        row.querySelector('.ap-preview').style.borderColor = apCss(val);
+        const o = apLoad();
+        const d = apDefault(v);
+        if(hex === d.hex && Math.abs(a - d.a) < 0.0005) delete o[v]; else o[v] = val;
+        apSave(o);
+        applyAppearance();
+    }
+    function resetAppearance(){
+        apSave({});
+        applyAppearance();
+        openAppearance(); // re-render rows with defaults
+    }
     let openPaths = new Set(), ctOpen = false, ctDept = 'All', selectedPath = null;
     let moveLog = [], moveLogFilter = '', moveLogScroll = 0, moveLogRange = 'shift';
     // Custom rate goals are stored per-site so goals don't bleed across FCs.
@@ -892,7 +1054,10 @@
         const xtStatus = data.xtrain_status==='ready' ? `<span style="color:var(--green);">&#10003; ${data.xtrain_count} verified</span>`
             : data.xtrain_status==='auth_expired' ? `<span style="color:var(--red);" title="Permission checks are paused until you re-authenticate. They resume automatically.">&#9888; Midway session expired &mdash; re-login to FCLM in Firefox</span>`
             : `<span style="color:var(--yellow);">&#9696; Verifying permissions...</span>`;
-        const bfStatus = data.backfill_status==='done' ? `<span style="color:var(--green);">&#10003; Up to date</span>` : data.backfill_status==='running' ? `<span style="color:var(--yellow);">&#9696; ${data.backfill_progress||'Collecting...'}</span>` : `<span style="color:var(--label-2);">Idle</span>`;
+        const bfStatus = data.backfill_status==='done' ? `<span style="color:var(--green);">&#10003; Up to date</span>`
+            : data.backfill_status==='running' ? `<span style="color:var(--yellow);">&#9696; ${data.backfill_progress||'Collecting...'}</span>`
+            : data.backfill_status==='error' ? `<span style="color:var(--red);" title="${(data.backfill_progress||'').replace(/"/g,'&quot;')}">&#9888; Backfill failed &mdash; ${data.backfill_progress||'unknown error'}</span>`
+            : `<span style="color:var(--label-2);">Idle</span>`;
         document.getElementById('summary').innerHTML += `
             <div class="chip wide">
                 <span><span class="k">X-Train</span>${xtStatus}</span>
@@ -902,15 +1067,18 @@
         
         // X-Train availability - count active pickers with verified perms for other depts
         const ctMap2=data.cross_training_by_employee_id||{};
+        const eidMap2=data.eid_to_login||{};
         const deptAvail={Stow:0,Pack:0,Receive:0,'Ship Dock':0,ICQA:0};
         const activeLoginSet=new Set();
         Object.values(aw).forEach(logins=>logins.forEach(l=>activeLoginSet.add(l)));
         for(const assocs of Object.values(data.associates_by_path||{})){
             for(const a of assocs){
                 if((a.paid_hours||0)<0.05) continue;
-                const login=a.login||'';
+                const login=a.login||eidMap2[a.employee_id]||'';
                 if(activeLoginSet.size>0&&!activeLoginSet.has(login)) continue;
-                const perms=ctMap2[a.employee_id]||[];
+                // Permission entries are keyed by employee_id (FCLM-sourced) OR
+                // login (Picking-Console-sourced); check both.
+                const perms=ctMap2[a.employee_id]||(login&&ctMap2[login])||[];
                 for(const d of perms){if(d in deptAvail) deptAvail[d]++;}
             }
         }
@@ -949,7 +1117,7 @@
                 <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap;position:relative;">
                     <div style="position:relative;">
                         <input type="text" id="attritionInput" placeholder="Enter login..." autocomplete="off" class="field" style="width:220px;" oninput="showAttrSuggestions()" onkeypress="if(event.key==='Enter')addAttrition()">
-                        <div id="attrSuggestions" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:180px;overflow-y:auto;background:rgba(44,44,46,0.96);backdrop-filter:var(--mat-blur);-webkit-backdrop-filter:var(--mat-blur);border:1px solid rgba(255,255,255,0.12);border-radius:var(--r-md);margin-top:6px;z-index:200;box-shadow:0 12px 40px rgba(0,0,0,0.5);"></div>
+                        <div id="attrSuggestions" style="display:none;position:absolute;top:100%;left:0;width:220px;max-height:180px;overflow-y:auto;background:rgba(44,44,46,0.96);backdrop-filter:var(--mat-blur);-webkit-backdrop-filter:var(--mat-blur);border:1px solid var(--b-popover);border-radius:var(--r-md);margin-top:6px;z-index:200;box-shadow:0 12px 40px rgba(0,0,0,0.5);"></div>
                     </div>
                     <input type="time" id="attritionTime" class="field">
                     <button onclick="addAttrition()" class="btn" style="background:var(--orange);color:#000;">Add</button>
@@ -1100,9 +1268,9 @@
                             const active=hasWF?filtered.filter(a=>{const l=a.login||'';return l&&activeLogins.includes(l);}):filtered;
                             const inactive=hasWF?filtered.filter(a=>{const l=a.login||'';return !l||!activeLogins.includes(l);}):[];
                             let rows='';
-                            if(hasWF&&active.length>0) rows+=`<tr><td colspan="7" style="padding:10px 8px 6px;font-size:0.7rem;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--hairline);background:var(--bg-1);">CURRENTLY PICKING (${active.length})</td></tr>`;
+                            if(hasWF&&active.length>0) rows+=`<tr><td colspan="7" style="padding:10px 8px 6px;font-size:0.7rem;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--b-row);background:var(--bg-1);">CURRENTLY PICKING (${active.length})</td></tr>`;
                             rows+=active.map(a=>renderRow(a,p,false)).join('');
-                            if(hasWF&&inactive.length>0) rows+=`<tr><td colspan="7" style="padding:14px 8px 6px;font-size:0.7rem;font-weight:700;color:var(--label-3);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--hairline);background:var(--bg-1);">PRIOR / INACTIVE (${inactive.length})</td></tr>`;
+                            if(hasWF&&inactive.length>0) rows+=`<tr><td colspan="7" style="padding:14px 8px 6px;font-size:0.7rem;font-weight:700;color:var(--label-3);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--b-row);background:var(--bg-1);">PRIOR / INACTIVE (${inactive.length})</td></tr>`;
                             rows+=inactive.map(a=>renderRow(a,p,true)).join('');
                             return rows;
                         })()}</tbody>
@@ -1194,7 +1362,7 @@
         if (!document.getElementById('moveLogTableWrap')) {
             section.innerHTML = `
                 <div class="panel" style="padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100vh - 160px);">
-                    <div style="padding:var(--sp-4) var(--sp-5);border-bottom:1px solid var(--hairline);flex:0 0 auto;">
+                    <div style="padding:var(--sp-4) var(--sp-5);border-bottom:1px solid var(--b-divider);flex:0 0 auto;">
                         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
                             <h3 style="font-size:var(--fs-subhead);">Path Move Log</h3>
                             <div style="display:flex;align-items:center;gap:6px;">
@@ -1208,7 +1376,7 @@
                                 <button class="btn" onclick="exportMoveLog()" style="padding:5px 10px;" title="Export end-of-shift CSV">Export CSV</button>
                             </div>
                         </div>
-                        <input type="text" id="moveLogSearch" placeholder="Filter by login or path..." value="${moveLogFilter}" oninput="moveLogFilterInput(this)" style="width:100%;background:var(--bg-1);border:1px solid var(--hairline);color:var(--label-1);padding:6px 10px;border-radius:6px;font-size:0.75rem;">
+                        <input type="text" id="moveLogSearch" placeholder="Filter by login or path..." value="${moveLogFilter}" oninput="moveLogFilterInput(this)" style="width:100%;background:var(--bg-1);border:1px solid var(--b-card);color:var(--label-1);padding:6px 10px;border-radius:6px;font-size:0.75rem;">
                     </div>
                     <div id="moveLogTableWrap" onscroll="moveLogScroll=this.scrollTop" style="overflow-y:auto;flex:1 1 auto;padding:0 4px 4px;"></div>
                 </div>`;
@@ -1522,7 +1690,7 @@
         const matches=[...allLogins].filter(l=>l.toLowerCase().includes(q)).slice(0,8);
         if(matches.length===0){box.style.display='none';return;}
         box.style.display='block';
-        box.innerHTML=matches.map(m=>`<div onclick="selectAttrSuggestion('${m}')" style="padding:6px 12px;cursor:pointer;font-size:0.78rem;color:var(--label-1);border-bottom:1px solid var(--hairline);" onmouseover="this.style.background='var(--fill-3)'" onmouseout="this.style.background=''">${m}</div>`).join('');
+        box.innerHTML=matches.map(m=>`<div onclick="selectAttrSuggestion('${m}')" style="padding:6px 12px;cursor:pointer;font-size:0.78rem;color:var(--label-1);border-bottom:1px solid var(--b-row);" onmouseover="this.style.background='var(--fill-3)'" onmouseout="this.style.background=''">${m}</div>`).join('');
     }
 
     function selectAttrSuggestion(login){
@@ -1541,12 +1709,14 @@
         const tol=data.tolerance||0.05;
         const ctMap=data.cross_training_by_employee_id||{};
         const pfc=pf(a.rate||0,p.expected,tol);
-        const ct=ctMap[a.employee_id]||[];
-        const dots=ct.map(d=>`<span class="ct-d ${DC[d]||''}" title="${d}"></span>`).join('');
         // Resolve login: prefer the associate's own login, then the live
         // eid_to_login map (FCLM roster + console bridge), then employee_id.
         const eidMap=data.eid_to_login||{};
         const login=a.login||eidMap[a.employee_id]||a.employee_id||'';
+        // Permission entries are keyed by employee_id (FCLM-sourced) OR login
+        // (Picking-Console-sourced); check both.
+        const ct=ctMap[a.employee_id]||ctMap[login]||[];
+        const dots=ct.map(d=>`<span class="ct-d ${DC[d]||''}" title="${d}"></span>`).join('');
         const histInfo=data.history_summary&&data.history_summary[a.employee_id]?data.history_summary[a.employee_id]:null;
         const histDays=histInfo?histInfo.days_active:0;
         // Tooltip
@@ -1593,7 +1763,7 @@
                 html += '<table style="width:100%;border-collapse:collapse;font-size:0.75rem;margin-bottom:14px;">';
                 html += '<tr style="border-bottom:1px solid var(--label-4);"><th style="text-align:left;padding:6px 8px;color:var(--label-2);">Path</th><th style="text-align:right;padding:6px 8px;color:var(--label-2);">Avg Rate</th><th style="text-align:right;padding:6px 8px;color:var(--label-2);">Shifts</th><th style="text-align:right;padding:6px 8px;color:var(--label-2);">Range</th></tr>';
                 for (const [path, stats] of Object.entries(avgs)) {
-                    html += `<tr style="border-bottom:1px solid var(--hairline);"><td style="padding:6px 8px;color:var(--label-1);">${path}</td><td style="text-align:right;padding:6px 8px;font-weight:600;color:var(--green);">${stats.avg_rate}</td><td style="text-align:right;padding:6px 8px;color:var(--label-1);">${stats.total_shifts}</td><td style="text-align:right;padding:6px 8px;color:var(--label-2);">${stats.min_rate} - ${stats.max_rate}</td></tr>`;
+                    html += `<tr style="border-bottom:1px solid var(--b-row);"><td style="padding:6px 8px;color:var(--label-1);">${path}</td><td style="text-align:right;padding:6px 8px;font-weight:600;color:var(--green);">${stats.avg_rate}</td><td style="text-align:right;padding:6px 8px;color:var(--label-1);">${stats.total_shifts}</td><td style="text-align:right;padding:6px 8px;color:var(--label-2);">${stats.min_rate} - ${stats.max_rate}</td></tr>`;
                 }
                 html += '</table>';
             } else {
@@ -1602,16 +1772,16 @@
             
             // Show move recommendation form
             const paths = Object.keys(data.paths || {}).filter(p => p !== fromPath);
-            html += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--hairline);">`;
+            html += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--b-divider);">`;
             html += `<strong style="color:var(--label-1);">Simulate Move from ${fromPath}:</strong>`;
             html += `<div style="display:flex;gap:8px;margin-top:8px;align-items:center;">`;
-            html += `<select id="recDestPath" style="background:var(--bg-1);border:1px solid var(--hairline);color:var(--label-1);padding:4px 8px;border-radius:4px;font-size:0.75rem;">`;
+            html += `<select id="recDestPath" style="background:var(--bg-1);border:1px solid var(--b-card);color:var(--label-1);padding:4px 8px;border-radius:4px;font-size:0.75rem;">`;
             for (const p of paths) {
                 html += `<option value="${p}">${p}</option>`;
             }
             html += `</select>`;
             html += `<span style="color:var(--label-3);font-size:0.7rem;">Goal:</span>`;
-            html += `<input type="number" id="recGoal" value="${getGoal(paths[0],5)}" style="width:50px;background:var(--bg-1);border:1px solid var(--hairline);color:var(--label-1);padding:3px 6px;border-radius:3px;font-size:0.75rem;text-align:center;">`;
+            html += `<input type="number" id="recGoal" value="${getGoal(paths[0],5)}" style="width:50px;background:var(--bg-1);border:1px solid var(--b-card);color:var(--label-1);padding:3px 6px;border-radius:3px;font-size:0.75rem;text-align:center;">`;
             html += `<button onclick="runRecommend('${employeeId}','${fromPath}')" style="background:var(--blue);color:var(--label-1);border:none;padding:4px 12px;border-radius:4px;font-size:0.75rem;cursor:pointer;">Analyze</button>`;
             html += `</div>`;
             html += `<div id="recResult" style="margin-top:10px;"></div>`;
@@ -1646,7 +1816,7 @@
             const rec = res.recommendation;
             
             let color = rec.verdict === 'GOOD MOVE' ? 'var(--green)' : rec.verdict === 'OKAY MOVE' ? 'var(--yellow)' : rec.verdict === 'RISKY MOVE' ? 'var(--red)' : 'var(--label-2)';
-            let html = `<div style="margin-top:8px;padding:10px;background:var(--bg-1);border-radius:6px;border:1px solid var(--hairline);">`;
+            let html = `<div style="margin-top:8px;padding:10px;background:var(--bg-1);border-radius:6px;border:1px solid var(--b-card);">`;
             html += `<div style="font-size:1rem;font-weight:700;color:${color};margin-bottom:6px;">${rec.verdict}</div>`;
             html += `<div style="font-size:0.7rem;color:var(--label-3);margin-bottom:6px;">Confidence: ${rec.confidence}</div>`;
             for (const reason of rec.reasoning || []) {
@@ -1790,7 +1960,7 @@
         showLoading(false);setupAutoRefresh();startHCPoller();loadSites();
     });
     </script>
-<div style="text-align:center;padding:12px;font-size:0.6rem;color:var(--label-3);border-top:1px solid var(--hairline);margin-top:20px;">PickMatrix <span id="footerVer" id="footerVer"></span> | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>
+<div style="text-align:center;padding:12px;font-size:0.6rem;color:var(--label-3);border-top:1px solid var(--b-divider);margin-top:20px;">PickMatrix <span id="footerVer" id="footerVer"></span> | Created &amp; managed by ttuyen | HOU8 Pick Operations | <span id="updateStatus">Checking for updates...</span></div>
 <script>
 // Check for updates on load.
 // Uses raw.githubusercontent.com (CDN, no per-IP API rate limit) instead of
