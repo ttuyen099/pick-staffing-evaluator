@@ -3,6 +3,24 @@
 All notable changes to PickMatrix (Pick Staffing Evaluator) are documented here.
 Versions map to `version.txt`; users auto-update on launch when the GitHub version is newer.
 
+## [2.6.1] — X-Train: false "Midway session expired"
+
+Server-side fix in `cross_training.py`. Restart the dashboard after the
+launcher updates (the launcher does this for you on next start).
+
+### Fixed
+- **X-Train no longer reports "⚠ Midway session expired — re-login to FCLM"
+  while you are still logged in.** When FCLM's own session cookie ages out but
+  the Midway cookies are still valid, FCLM does a silent SSO round-trip
+  (`302 → midway-auth/SSO/redirect → 307 back to FCLM with an id_token →
+  302 → 200`). The 2.5.7 auth check treated *any* hop through `midway-auth`
+  in the redirect history as an expired session, so the permission batch
+  aborted on the first associate, every X-Train count showed 0, and the red
+  banner stayed up even though rates and headcount kept working. The check
+  now inspects only the **final** response: HTTP 401/403, a final URL on
+  `midway-auth`, or a Midway login page body. Genuine expiry is still
+  detected and still auto-retries once you re-login.
+
 ## [2.6.0] — Apple-style dark UI remodel
 
 Front-end only (`staffing_dashboard.html`). No server or data changes; no

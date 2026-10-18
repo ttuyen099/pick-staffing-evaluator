@@ -311,18 +311,22 @@ def _raise_if_auth_failed(response):
     Raise FCLMAuthError if this FCLM response indicates the Midway session is
     not valid. Two signatures:
       * HTTP 401/403.
-      * An SSO bounce: the final URL (after redirects) is on midway-auth, or
-        the body is Midway's login page. These typically come back as 200, so
-        status alone is not enough.
+      * The request ENDS on Midway: the final URL (after redirects) is on
+        midway-auth, or the body is Midway's login page. These typically come
+        back as 200, so status alone is not enough.
+
+    NOTE: an intermediate hop through midway-auth is NOT a failure. When FCLM's
+    own session cookie has aged out but the Midway cookies are still valid,
+    FCLM does a silent SSO round-trip (302 -> midway-auth/SSO/redirect ->
+    307 back to FCLM with an id_token -> 302 -> 200 real page). Treating that
+    hop as an expiry falsely reported "Midway session expired" for every
+    associate (2026-10-17), so only the final destination is inspected.
     """
     if response.status_code in (401, 403):
         raise FCLMAuthError(f"HTTP {response.status_code}")
     final_url = (getattr(response, "url", "") or "").lower()
     if "midway-auth.amazon.com" in final_url:
         raise FCLMAuthError("redirected to Midway login")
-    for h in getattr(response, "history", []) or []:
-        if "midway-auth.amazon.com" in (h.headers.get("Location", "") or "").lower():
-            raise FCLMAuthError("redirected to Midway login")
     head = (response.text or "")[:4000].lower()
     if "midway" in head and ("sign in" in head or "authenticate" in head or "login" in head):
         if "employee" not in head and "permission" not in head:
